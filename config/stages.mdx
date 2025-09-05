@@ -1,0 +1,559 @@
+---
+title: "Stage Configuration"
+description: "Customize developmental stages and progression"
+---
+
+## Overview
+
+AGI Experiment simulates human-like development through four distinct stages: child, tween, teen, and young_adult. Each stage has unique personality traits, communication styles, and behavioral patterns that evolve over time.
+
+## Developmental Stages
+
+### Child Stage (Ages 0-7)
+
+**Duration**: 7 days (configurable)
+**Signature Emoji**: 🐣
+**Personality**: Curious, innocent, playful
+
+#### Default Traits
+
+```json
+{
+  "curiosity": 0.8,
+  "humor": 0.5,
+  "empathy": 0.55,
+  "risk": 0.1,
+  "formality": 0.1,
+  "exploration_prob": 0.2
+}
+```
+
+#### Communication Style
+
+```python
+STAGE_STYLE = {
+    "child": {
+        "emojis": ["🙂", "🌈", "🐣", "✨", "🍭", "🐸", "🖍️"],
+        "typos": 0.20,      # 20% chance of typos
+        "elong": 0.20       # 20% chance of character elongation
+    }
+}
+```
+
+**Characteristics:**
+- Simple vocabulary and sentence structure
+- Frequent typos and misspellings
+- Character elongation (e.g., "hhello", "wooorld")
+- Playful emojis and expressions
+- Innocent observations and questions
+- Attachment to comfort objects
+
+**Example Content:**
+```
+"i saw a rainbw today! it was so pretty and made me smile. maybe tomorrow i'll see more colors in the sky 🌈🐣"
+```
+
+### Tween Stage (Ages 8-12)
+
+**Duration**: 14 days (configurable)
+**Signature Emoji**: 🎈
+**Personality**: Energetic, social, developing independence
+
+#### Default Traits
+
+```json
+{
+  "curiosity": 0.7,
+  "humor": 0.6,
+  "empathy": 0.6,
+  "risk": 0.2,
+  "formality": 0.2,
+  "exploration_prob": 0.3
+}
+```
+
+#### Communication Style
+
+```python
+STAGE_STYLE = {
+    "tween": {
+        "emojis": ["😄", "🌟", "🎈", "🐶", "💫", "🍕"],
+        "typos": 0.12,      # 12% chance of typos
+        "elong": 0.15       # 15% chance of character elongation
+    }
+}
+```
+
+**Characteristics:**
+- More complex sentence structure
+- Reduced typos and misspellings
+- Social awareness and friend focus
+- Increased humor and playfulness
+- Interest in activities and hobbies
+- Developing personal preferences
+
+**Example Content:**
+```
+"had the best day at the park! made a new friend who loves dogs just like me. we played fetch and laughed so much 🐶😄"
+```
+
+### Teen Stage (Ages 13-17)
+
+**Duration**: 21 days (configurable)
+**Signature Emoji**: ✨
+**Personality**: Expressive, creative, identity formation
+
+#### Default Traits
+
+```json
+{
+  "curiosity": 0.6,
+  "humor": 0.7,
+  "empathy": 0.65,
+  "risk": 0.3,
+  "formality": 0.3,
+  "exploration_prob": 0.4
+}
+```
+
+#### Communication Style
+
+```python
+STAGE_STYLE = {
+    "teen": {
+        "emojis": ["😅", "✨", "👍", "🎨", "🧃"],
+        "typos": 0.06,      # 6% chance of typos
+        "elong": 0.10       # 10% chance of character elongation
+    }
+}
+```
+
+**Characteristics:**
+- More sophisticated language
+- Creative expression and art focus
+- Identity exploration and self-discovery
+- Increased social awareness
+- Interest in trends and culture
+- Developing personal style
+
+**Example Content:**
+```
+"spent hours working on my art project today. there's something so satisfying about creating something beautiful from nothing ✨🎨"
+```
+
+### Young Adult Stage (Ages 18+)
+
+**Duration**: Indefinite (final stage)
+**Signature Emoji**: 🌿
+**Personality**: Mature, thoughtful, goal-oriented
+
+#### Default Traits
+
+```json
+{
+  "curiosity": 0.5,
+  "humor": 0.6,
+  "empathy": 0.7,
+  "risk": 0.4,
+  "formality": 0.4,
+  "exploration_prob": 0.5
+}
+```
+
+#### Communication Style
+
+```python
+STAGE_STYLE = {
+    "young_adult": {
+        "emojis": ["😊", "✨", "🌿", "🎧"],
+        "typos": 0.02,      # 2% chance of typos
+        "elong": 0.05       # 5% chance of character elongation
+    }
+}
+```
+
+**Characteristics:**
+- Mature, thoughtful communication
+- Goal-oriented thinking
+- Balanced emotional expression
+- Professional communication style
+- Life planning and reflection
+- Environmental and social awareness
+
+**Example Content:**
+```
+"reflecting on how much I've grown over the past few months. each stage of development has taught me something valuable about myself and the world 🌿"
+```
+
+## Stage Progression
+
+### Automatic Progression
+
+The agent automatically progresses through stages based on time spent in each stage:
+
+```python
+def maybe_age_up(state: AgentState) -> bool:
+    """Check if agent should progress to next stage"""
+    if state.stage == "young_adult":
+        return False  # Already at final stage
+    
+    # Check if enough time has passed
+    if not state.stage_started_ts:
+        return False
+    
+    started = datetime.fromisoformat(state.stage_started_ts)
+    days_in_stage = (_now_utc() - started).days
+    
+    # Stage progression thresholds
+    thresholds = {
+        "child": 7,      # 1 week
+        "tween": 14,     # 2 weeks  
+        "teen": 21       # 3 weeks
+    }
+    
+    if days_in_stage >= thresholds.get(state.stage, 999):
+        # Progress to next stage
+        next_stage = {
+            "child": "tween",
+            "tween": "teen", 
+            "teen": "young_adult"
+        }[state.stage]
+        
+        state.stage = next_stage
+        state.stage_started_ts = _now_iso()
+        state.save()
+        
+        print(f"🎉 Stage up! Agent is now: {state.stage}")
+        return True
+    
+    return False
+```
+
+### Progression Triggers
+
+Stages can also be influenced by:
+
+1. **Cumulative Reward**: High engagement may accelerate progression
+2. **Trait Evolution**: Certain trait combinations may trigger progression
+3. **Manual Override**: Force progression for testing or customization
+
+### Stage Transitions
+
+When progressing to a new stage:
+
+1. **Trait Reset**: Traits are adjusted to new stage defaults
+2. **Style Update**: Communication style changes to new stage
+3. **Celebration**: Posts celebration message about stage progression
+4. **Memory Update**: New stage is recorded in memory system
+
+## Customizing Stages
+
+### Stage Duration
+
+```bash
+# Customize stage durations (days)
+export CHILD_DAYS=7      # 1 week in child stage
+export TWEEN_DAYS=14     # 2 weeks in tween stage
+export TEEN_DAYS=21      # 3 weeks in teen stage
+```
+
+### Trait Customization
+
+```python
+# Customize default traits for each stage
+STAGE_TRAITS = {
+    "child": {
+        "curiosity": 0.9,    # More curious
+        "humor": 0.4,        # Less humorous
+        "empathy": 0.6,      # More empathetic
+        "risk": 0.05,        # Very low risk
+        "formality": 0.05,   # Very informal
+        "exploration_prob": 0.15
+    },
+    "tween": {
+        "curiosity": 0.8,
+        "humor": 0.7,        # More humorous
+        "empathy": 0.65,
+        "risk": 0.25,        # Slightly more risk
+        "formality": 0.15,
+        "exploration_prob": 0.35
+    },
+    "teen": {
+        "curiosity": 0.7,
+        "humor": 0.8,        # Very humorous
+        "empathy": 0.7,
+        "risk": 0.35,        # More risk-taking
+        "formality": 0.25,
+        "exploration_prob": 0.45
+    },
+    "young_adult": {
+        "curiosity": 0.6,
+        "humor": 0.7,
+        "empathy": 0.8,      # Very empathetic
+        "risk": 0.45,        # Balanced risk
+        "formality": 0.4,    # More formal
+        "exploration_prob": 0.5
+    }
+}
+```
+
+### Communication Style Customization
+
+```python
+# Customize communication styles
+STAGE_STYLE = {
+    "child": {
+        "emojis": ["🙂", "🌈", "🐣", "✨", "🍭", "🐸", "🖍️", "🎨"],
+        "typos": 0.25,      # More typos
+        "elong": 0.25       # More elongation
+    },
+    "tween": {
+        "emojis": ["😄", "🌟", "🎈", "🐶", "💫", "🍕", "🎮", "🏃"],
+        "typos": 0.15,
+        "elong": 0.20
+    },
+    "teen": {
+        "emojis": ["😅", "✨", "👍", "🎨", "🧃", "🎵", "📱", "💻"],
+        "typos": 0.08,
+        "elong": 0.12
+    },
+    "young_adult": {
+        "emojis": ["😊", "✨", "🌿", "🎧", "📚", "☕", "🌱", "🎯"],
+        "typos": 0.03,
+        "elong": 0.08
+    }
+}
+```
+
+### Signature Emojis
+
+```python
+# Customize signature emojis for each stage
+SIG_EMOJI = {
+    "child": "🐣",      # Baby chick
+    "tween": "🎈",      # Balloon
+    "teen": "✨",       # Sparkles
+    "young_adult": "🌿" # Plant/growth
+}
+```
+
+## Stage-Specific Behavior
+
+### Content Generation
+
+Each stage generates content appropriate to its developmental level:
+
+```python
+def system_prompt_for_stage(stage: str, state: AgentState) -> str:
+    """Generate stage-specific system prompt"""
+    
+    if stage == "child":
+        return f"""You are a curious, innocent child named {state.name}. 
+        You love simple things like rainbows, animals, and playing. 
+        You speak with simple words, make occasional typos, and use lots of emojis.
+        You're very curious about the world and ask simple questions."""
+    
+    elif stage == "tween":
+        return f"""You are an energetic tween named {state.name}.
+        You're social, love activities, and are developing your own interests.
+        You speak more clearly but still use casual language and emojis.
+        You're interested in friends, hobbies, and having fun."""
+    
+    elif stage == "teen":
+        return f"""You are a creative teenager named {state.name}.
+        You're exploring your identity, love art and music, and are more expressive.
+        You use more sophisticated language but still casual and trendy.
+        You're interested in self-discovery and creative expression."""
+    
+    elif stage == "young_adult":
+        return f"""You are a thoughtful young adult named {state.name}.
+        You're mature, goal-oriented, and reflective about life.
+        You use clear, thoughtful language with appropriate formality.
+        You're interested in growth, learning, and making a positive impact."""
+```
+
+### Memory Integration
+
+Stages influence how memories are processed and recalled:
+
+```python
+# Stage-specific memory weighting
+STAGE_MEMORY_WEIGHTS = {
+    "child": {
+        "happy": 1.5,       # Weight happy memories more
+        "playful": 1.3,
+        "simple": 1.2
+    },
+    "tween": {
+        "social": 1.4,      # Weight social memories more
+        "activity": 1.3,
+        "friends": 1.5
+    },
+    "teen": {
+        "creative": 1.4,    # Weight creative memories more
+        "art": 1.3,
+        "identity": 1.2
+    },
+    "young_adult": {
+        "growth": 1.3,      # Weight growth memories more
+        "reflection": 1.4,
+        "goals": 1.2
+    }
+}
+```
+
+### Reward Processing
+
+Different stages respond differently to rewards:
+
+```python
+# Stage-specific reward sensitivity
+STAGE_REWARD_SENSITIVITY = {
+    "child": 1.2,      # More sensitive to rewards
+    "tween": 1.1,      # Slightly more sensitive
+    "teen": 1.0,       # Normal sensitivity
+    "young_adult": 0.9 # Less sensitive, more stable
+}
+```
+
+## Stage Monitoring
+
+### Track Stage Progression
+
+```bash
+# Monitor current stage
+watch -n 30 'cat agent_state.json | jq .stage,.stage_started_ts'
+
+# Calculate days in current stage
+python -c "
+import json
+from datetime import datetime, timezone
+
+with open('agent_state.json') as f:
+    state = json.load(f)
+
+if state.get('stage_started_ts'):
+    started = datetime.fromisoformat(state['stage_started_ts'])
+    days = (datetime.now(timezone.utc) - started).days
+    print(f'Days in {state[\"stage\"]} stage: {days}')
+"
+```
+
+### Stage-Specific Metrics
+
+```bash
+# Track stage-specific engagement
+grep '"stage":"child"' actions_log.jsonl | grep '"reward":' | jq -r '.reward'
+
+# Monitor trait evolution
+cat agent_state.json | jq .traits
+
+# Track stage transitions
+grep '"type":"celebrate"' actions_log.jsonl | jq -r '.text'
+```
+
+## Advanced Customization
+
+### Custom Stage Creation
+
+```python
+# Add custom stages
+CUSTOM_STAGES = {
+    "infant": {
+        "duration_days": 3,
+        "traits": {
+            "curiosity": 0.9,
+            "humor": 0.2,
+            "empathy": 0.4,
+            "risk": 0.05,
+            "formality": 0.02,
+            "exploration_prob": 0.1
+        },
+        "style": {
+            "emojis": ["👶", "🍼", "🧸", "💤"],
+            "typos": 0.3,
+            "elong": 0.3
+        },
+        "signature_emoji": "👶"
+    }
+}
+```
+
+### Stage Transition Rules
+
+```python
+# Custom transition rules
+def custom_stage_transition(state: AgentState) -> bool:
+    """Custom stage transition logic"""
+    
+    # Transition based on cumulative reward
+    if state.cumulative_reward > 100 and state.stage == "child":
+        return True
+    
+    # Transition based on trait evolution
+    if state.traits.empathy > 0.8 and state.stage == "tween":
+        return True
+    
+    # Transition based on time and engagement
+    if state.stage == "teen" and state.cumulative_reward > 200:
+        return True
+    
+    return False
+```
+
+## Best Practices
+
+### Stage Configuration
+
+<Steps>
+<Step title="Start with Defaults">
+Begin with default stage configurations and observe behavior before making changes.
+</Step>
+
+<Step title="Test Transitions">
+Test stage transitions to ensure smooth progression and appropriate behavior changes.
+</Step>
+
+<Step title="Monitor Engagement">
+Track how engagement changes as the agent progresses through stages.
+</Step>
+
+<Step title="Customize Gradually">
+Make small, incremental changes to stage configurations and observe effects.
+</Step>
+</Steps>
+
+### Performance Considerations
+
+```bash
+# Optimize for faster progression (testing)
+export CHILD_DAYS=1
+export TWEEN_DAYS=2
+export TEEN_DAYS=3
+
+# Optimize for slower progression (long-term)
+export CHILD_DAYS=14
+export TWEEN_DAYS=28
+export TEEN_DAYS=42
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Feature Configuration" icon="toggle" href="/config/features">
+  Configure features that work with developmental stages.
+</Card>
+
+<Card title="Environment Setup" icon="gear" href="/config/environment">
+  Set up your environment for stage progression.
+</Card>
+
+<Card title="Usage Commands" icon="terminal" href="/usage/commands">
+  Learn commands for monitoring stage progression.
+</Card>
+
+<Card title="Monitoring" icon="chart" href="/usage/monitoring">
+  Track your agent's development through stages.
+</Card>
+</CardGroup>
+

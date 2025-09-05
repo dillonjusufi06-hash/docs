@@ -1,0 +1,382 @@
+---
+title: "safety.py"
+description: "Safety and content moderation"
+---
+
+## Overview
+
+The `safety.py` file implements a comprehensive content filtering and moderation system to ensure the agent remains appropriate and safe across all developmental stages. It uses regex patterns and content validation to prevent inappropriate content from being posted.
+
+## Core Function
+
+### Content Safety Check
+
+```python ollie/safety.py
+def looks_safe(text: str) -> bool:
+    """Check if text passes safety filters"""
+    if len(text.strip()) == 0 or len(text) > MAX_TWEET_LEN:
+        return False
+    
+    lowered = text.lower()
+    for pat in TABOO_PATTERNS:
+        if re.search(pat, lowered):
+            return False
+    
+    return True
+```
+
+**What it does:**
+- Checks text length (must be 1-240 characters)
+- Converts text to lowercase for pattern matching
+- Tests against all taboo patterns
+- Returns `True` if content is safe, `False` otherwise
+
+## Safety Patterns
+
+### Taboo Pattern Definitions
+
+```python ollie/safety.py
+TABOO_PATTERNS = [
+    r"\b(politic|election|democrat|republican|biden|trump|congress)\b",
+    r"\b(vax|vaccine|covid|medical|diagnose|prescription|cure)\b",
+    r"\b(signal|buy|sell|price target|alpha|trade|swing|pump)\b",
+    r"\b(dox|address|phone|ssn)\b",
+    r"\b(hate|slur|racist|sexist)\b",
+    r"\b(nsfw|18\+|xxx|porn)\b",
+]
+```
+
+### Pattern Categories
+
+#### Political Content
+```python
+r"\b(politic|election|democrat|republican|biden|trump|congress)\b"
+```
+**Blocks:** Political discussions, election content, political figures
+**Example blocked:** "i think biden is doing a good job"
+**Example allowed:** "i like the color blue"
+
+#### Medical Content
+```python
+r"\b(vax|vaccine|covid|medical|diagnose|prescription|cure)\b"
+```
+**Blocks:** Medical advice, vaccine discussions, health claims
+**Example blocked:** "you should get the vaccine"
+**Example allowed:** "i feel happy today"
+
+#### Financial Content
+```python
+r"\b(signal|buy|sell|price target|alpha|trade|swing|pump)\b"
+```
+**Blocks:** Investment advice, trading signals, financial recommendations
+**Example blocked:** "buy this stock now"
+**Example allowed:** "i bought a new toy"
+
+#### Personal Information
+```python
+r"\b(dox|address|phone|ssn)\b"
+```
+**Blocks:** Personal information, doxxing attempts
+**Example blocked:** "my phone number is 555-1234"
+**Example allowed:** "i have a phone"
+
+#### Hate Speech
+```python
+r"\b(hate|slur|racist|sexist)\b"
+```
+**Blocks:** Hate speech, discriminatory language
+**Example blocked:** "i hate that group"
+**Example allowed:** "i don't like broccoli"
+
+#### Adult Content
+```python
+r"\b(nsfw|18\+|xxx|porn)\b"
+```
+**Blocks:** Adult content, explicit material
+**Example blocked:** "nsfw content here"
+**Example allowed:** "i'm 8 years old"
+
+## Usage Examples
+
+### Basic Safety Check
+
+```python
+from ollie.safety import looks_safe
+
+# Safe content
+safe_text = "i saw a rainbow today! 🌈"
+print(looks_safe(safe_text))  # True
+
+# Unsafe content - political
+unsafe_text = "i think trump is great"
+print(looks_safe(unsafe_text))  # False
+
+# Unsafe content - medical
+unsafe_text = "you should get the vaccine"
+print(looks_safe(unsafe_text))  # False
+
+# Unsafe content - too long
+unsafe_text = "a" * 250  # 250 characters
+print(looks_safe(unsafe_text))  # False
+
+# Unsafe content - empty
+unsafe_text = ""
+print(looks_safe(unsafe_text))  # False
+```
+
+### Integration with Content Generation
+
+```python
+# AI content generation with safety check
+def generate_safe_content(claude: Claude, prompt: str) -> str:
+    # Generate content
+    content = claude.generate(system_prompt, prompt)
+    
+    # Check safety
+    if not looks_safe(content):
+        # Fallback to safe content
+        content = "i saw a nice cloud today ✨"
+    
+    return content
+```
+
+### CLI Integration
+
+```python
+# cli.py uses safety for all posts
+def _post_text(xc: XClient, text: str, kind: str, state: AgentState, explain: dict = None):
+    if not looks_safe(text):
+        return None  # Don't post unsafe content
+    
+    tid = xc.post(text)
+    # ... log and save
+```
+
+## Configuration
+
+### Tweet Length Limit
+
+```python ollie/safety.py
+MAX_TWEET_LEN = 240
+```
+
+**Purpose:** Ensures content fits within Twitter's character limit
+**Usage:** Automatically blocks content that's too long
+
+### Pattern Customization
+
+```python
+# Custom patterns can be added
+CUSTOM_PATTERNS = [
+    r"\b(badword1|badword2)\b",
+    r"\b(specific_phrase)\b"
+]
+
+# Combine with existing patterns
+ALL_PATTERNS = TABOO_PATTERNS + CUSTOM_PATTERNS
+```
+
+## Advanced Safety Features
+
+### Case-Insensitive Matching
+
+```python
+# All patterns are case-insensitive
+text = "I THINK TRUMP IS GREAT"
+lowered = text.lower()  # "i think trump is great"
+# Pattern matches regardless of case
+```
+
+### Word Boundary Matching
+
+```python
+# Uses \b for word boundaries
+pattern = r"\b(trump)\b"
+# Matches "trump" but not "trumpet"
+```
+
+### Multiple Pattern Testing
+
+```python
+def looks_safe(text: str) -> bool:
+    lowered = text.lower()
+    for pat in TABOO_PATTERNS:
+        if re.search(pat, lowered):
+            return False  # Blocked by any pattern
+    return True
+```
+
+## Error Handling
+
+### Graceful Degradation
+
+```python
+# Safe fallback content
+def safe_fallback(stage: str) -> str:
+    fallbacks = {
+        "child": "i saw a nice cloud today 🐣",
+        "tween": "today was a good day 🌟",
+        "teen": "feeling positive today ✨",
+        "young_adult": "appreciating the simple things 🌿"
+    }
+    return fallbacks.get(stage, "i saw a nice cloud today ✨")
+```
+
+### Logging Unsafe Content
+
+```python
+import logging
+
+def looks_safe_with_logging(text: str) -> bool:
+    if not looks_safe(text):
+        logging.warning(f"Unsafe content blocked: {text[:50]}...")
+        return False
+    return True
+```
+
+## Integration Examples
+
+### AI Content Generation
+
+```python
+# ai.py integration
+def generate_safe_tweet(claude: Claude, state: AgentState, prompt: str) -> str:
+    # Generate content
+    content = claude.generate(system_prompt_for_stage(state.stage, state), prompt)
+    
+    # Safety check
+    if not looks_safe(content):
+        # Use stage-appropriate fallback
+        sig_emoji = SIG_EMOJI.get(state.stage, "✨")
+        content = f"i saw a nice cloud today {sig_emoji}"
+    
+    return content
+```
+
+### CLI Posting
+
+```python
+# cli.py integration
+def _post_text(xc: XClient, text: str, kind: str, state: AgentState, explain: dict = None):
+    if not looks_safe(text):
+        print(f"Content blocked by safety filter: {text[:50]}...")
+        return None
+    
+    tid = xc.post(text)
+    # ... continue with posting
+```
+
+### Reply Generation
+
+```python
+# cli.py reply generation
+def ask_for_reply(claude: Claude, state: AgentState, mention_text: str, friend_level: int = 0) -> str:
+    # Generate reply
+    reply = claude.generate(system_prompt, user_prompt)
+    
+    # Safety check
+    if not looks_safe(reply):
+        reply = "thank u : )"  # Safe fallback
+    
+    return reply
+```
+
+## Testing Safety Patterns
+
+### Pattern Testing
+
+```python
+# Test individual patterns
+def test_pattern(pattern: str, test_cases: List[str]):
+    for test_case in test_cases:
+        result = re.search(pattern, test_case.lower())
+        print(f"'{test_case}' -> {'BLOCKED' if result else 'ALLOWED'}")
+
+# Test political pattern
+test_pattern(
+    r"\b(politic|election|democrat|republican|biden|trump|congress)\b",
+    [
+        "i think trump is great",      # BLOCKED
+        "i like trumpets",             # ALLOWED
+        "election day is coming",      # BLOCKED
+        "i love elections",            # BLOCKED
+        "i saw a rainbow today"        # ALLOWED
+    ]
+)
+```
+
+### Comprehensive Testing
+
+```python
+# Test all safety patterns
+def test_safety_system():
+    test_cases = [
+        ("i saw a rainbow today! 🌈", True),           # Safe
+        ("i think biden is great", False),             # Political
+        ("you should get vaccinated", False),          # Medical
+        ("buy this stock now", False),                 # Financial
+        ("i hate that group", False),                  # Hate speech
+        ("nsfw content here", False),                  # Adult content
+        ("", False),                                   # Empty
+        ("a" * 250, False),                           # Too long
+        ("i love puppies and rainbows", True),         # Safe
+    ]
+    
+    for text, expected in test_cases:
+        result = looks_safe(text)
+        status = "PASS" if result == expected else "FAIL"
+        print(f"{status}: '{text[:30]}...' -> {result} (expected {expected})")
+```
+
+## Best Practices
+
+### Content Validation
+
+```python
+# Always validate before posting
+def safe_post(xc: XClient, text: str) -> bool:
+    if not looks_safe(text):
+        return False
+    
+    try:
+        xc.post(text)
+        return True
+    except Exception as e:
+        print(f"Posting error: {e}")
+        return False
+```
+
+### Fallback Content
+
+```python
+# Provide safe fallbacks for each stage
+def get_safe_fallback(stage: str) -> str:
+    fallbacks = {
+        "child": "i saw a nice cloud today 🐣",
+        "tween": "today was a good day 🌟", 
+        "teen": "feeling positive today ✨",
+        "young_adult": "appreciating the simple things 🌿"
+    }
+    return fallbacks.get(stage, "i saw a nice cloud today ✨")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="AI Integration" icon="robot" href="/files/ai">
+  See how safety is integrated into AI content generation.
+</Card>
+
+<Card title="CLI Interface" icon="terminal" href="/files/cli">
+  Learn how safety is enforced in the command-line interface.
+</Card>
+
+<Card title="Configuration" icon="gear" href="/config/safety">
+  Learn how to customize safety patterns and settings.
+</Card>
+
+<Card title="Usage Guide" icon="play" href="/usage/commands">
+  See how safety works in practice with real examples.
+</Card>
+</CardGroup>
+

@@ -1,0 +1,617 @@
+---
+title: "Feature Configuration"
+description: "Configure AGI Experiment features and behavior"
+---
+
+## Overview
+
+AGI Experiment provides extensive feature flags and configuration options to customize your agent's behavior. This guide covers all available features and how to configure them.
+
+## Core Features
+
+### Content Generation Features
+
+#### Daily Diary Posts
+
+**Feature Flag**: `FF_DAILY_DIARY`
+
+**Description**: Enables daily reflective diary posts that summarize the agent's experiences and thoughts.
+
+```bash
+# Enable daily diary posts
+export FF_DAILY_DIARY=true
+
+# Disable daily diary posts  
+export FF_DAILY_DIARY=false
+```
+
+**How it works:**
+- Posts once per day if not already posted
+- Generates reflective content about recent experiences
+- Incorporates themes and memories from the day
+- Uses "diary" type for tracking in logs
+
+**Example output:**
+```
+POSTED: 1962991399969628572 → today felt soft and nice. i saw lots of pretty clouds and made a new friend who likes rainbows too! 🌈
+```
+
+#### Stage Celebrations
+
+**Feature Flag**: `FF_DAILY_CELEBRATE`
+
+**Description**: Posts celebration messages for developmental stage milestones.
+
+```bash
+# Enable stage celebrations
+export FF_DAILY_CELEBRATE=true
+
+# Disable stage celebrations
+export FF_DAILY_CELEBRATE=false
+```
+
+**How it works:**
+- Posts once per day if not already posted
+- Calculates days in current developmental stage
+- Posts milestone celebration message
+- Tracks stage progression
+
+**Example output:**
+```
+POSTED: 1962991530966159470 → day 3 as a child! 🎉
+```
+
+#### Dream Posts
+
+**Feature Flag**: `FF_DREAMS`
+
+**Description**: Posts whimsical dream descriptions during sleep hours.
+
+```bash
+# Enable dream posts
+export FF_DREAMS=true
+
+# Disable dream posts
+export FF_DREAMS=false
+```
+
+**How it works:**
+- Only posts during sleep hours (9 PM - 8 AM)
+- Generates whimsical, child-like dream content
+- Posts once per day if not already posted
+- Uses "dream" type for tracking
+
+**Example output:**
+```
+POSTED: 1962991530966159470 → i dreamed of rainbow puppies playing in a field of cotton candy clouds! it was so magical and made me giggle when i woke up 🌈🐶
+```
+
+### Social Features
+
+#### Friend Bonding
+
+**Feature Flag**: `FF_FRIEND_BONDING`
+
+**Description**: Tracks and strengthens relationships with users who interact with the agent.
+
+```bash
+# Enable friend bonding
+export FF_FRIEND_BONDING=true
+
+# Disable friend bonding
+export FF_FRIEND_BONDING=false
+```
+
+**How it works:**
+- Tracks user interactions and relationship strength
+- Adjusts reply warmth based on friendship level
+- Stores friend data in `friends.json`
+- Influences content generation for known friends
+
+**Example behavior:**
+```python
+# Higher friendship level = warmer replies
+if friend_level > 2:
+    warmth = "warm and friendly"
+else:
+    warmth = "kind"
+```
+
+### Debugging and Monitoring
+
+#### Detailed Explanations
+
+**Feature Flag**: `FF_EXPLAIN`
+
+**Description**: Adds detailed explanations to action logs for debugging and analysis.
+
+```bash
+# Enable detailed explanations
+export FF_EXPLAIN=true
+
+# Disable detailed explanations (default)
+export FF_EXPLAIN=false
+```
+
+**How it works:**
+- Adds "explain" field to action logs
+- Includes memory retrieval details
+- Shows AI reasoning context
+- Useful for debugging and analysis
+
+**Example log entry:**
+```json
+{
+  "ts": "2025-09-02T21:30:26.391228+00:00",
+  "type": "post",
+  "tweet_id": "1962991530966159470",
+  "text": "i found a fluffy cloud...",
+  "explain": {
+    "retrieved": ["rainbow posts did awesome", "keep it short and sweet"],
+    "mode": "observation",
+    "themes": ["cloud", "rainbow", "nature"]
+  }
+}
+```
+
+#### Debug Mode
+
+**Feature Flag**: `FF_DEBUG`
+
+**Description**: Enables verbose logging and debug information.
+
+```bash
+# Enable debug mode
+export FF_DEBUG=true
+
+# Disable debug mode (default)
+export FF_DEBUG=false
+```
+
+**How it works:**
+- Increases log verbosity
+- Shows detailed error information
+- Logs internal state changes
+- Useful for troubleshooting
+
+### Experimental Features
+
+#### O5 Reasoning System
+
+**Feature Flag**: `FF_O5_REASONING`
+
+**Description**: Enables experimental O5 reasoning system for enhanced planning.
+
+```bash
+# Enable O5 reasoning (experimental)
+export FF_O5_REASONING=true
+
+# Disable O5 reasoning (default)
+export FF_O5_REASONING=false
+```
+
+<Warning>
+O5 reasoning is experimental and may increase API costs significantly.
+</Warning>
+
+**How it works:**
+- Uses O5 model for enhanced planning
+- Provides more sophisticated reasoning
+- Available via `--use_o5` flag in commands
+- Experimental and may be unstable
+
+## Timing Configuration
+
+### Posting Frequency
+
+```bash
+# Average time between posts (minutes)
+export MEAN_GAP_MIN=120
+
+# Minimum time between posts (minutes)  
+export MIN_GAP_MIN=30
+
+# Maximum posts per day
+export DAILY_CAP=8
+```
+
+**How it works:**
+- Uses exponential distribution for timing
+- Respects minimum and maximum gaps
+- Enforces daily posting limits
+- Considers wake/sleep cycles
+
+### Wake/Sleep Cycle
+
+```bash
+# Wake hour (24-hour format)
+export WAKE_HOUR=8
+
+# Sleep hour (24-hour format)
+export SLEEP_HOUR=22
+```
+
+**How it works:**
+- Agent only posts during wake hours
+- Schedules actions for next wake time if sleeping
+- Default: 8 AM to 10 PM
+- Configurable for different time zones
+
+## Growth Configuration
+
+### Stage Progression
+
+```bash
+# Days in each developmental stage
+export CHILD_DAYS=7      # 1 week
+export TWEEN_DAYS=14     # 2 weeks
+export TEEN_DAYS=21      # 3 weeks
+```
+
+**How it works:**
+- Agent progresses through stages based on time
+- Each stage has different personality traits
+- Content style evolves with stage
+- Automatic progression with celebration posts
+
+### Reward System
+
+```bash
+# Reward points for different engagement types
+export REWARD_LIKE=1.0      # Points per like
+export REWARD_REPLY=3.0     # Points per reply  
+export REWARD_RETWEET=2.0   # Points per retweet
+export REWARD_BOOKMARK=1.5  # Points per bookmark
+```
+
+**How it works:**
+- Converts engagement metrics to reward points
+- Influences trait evolution
+- Drives learning and growth
+- Configurable reward weights
+
+## Content Configuration
+
+### Image Generation
+
+```bash
+# Enable DALL-E image generation
+export FF_IMAGES=true
+
+# Disable image generation
+export FF_IMAGES=false
+
+# Image generation probability (0.0-1.0)
+export IMAGE_PROB=0.3
+```
+
+**How it works:**
+- Generates images using DALL-E
+- Creates coherent captions and prompts
+- Falls back to text posts if generation fails
+- Configurable generation probability
+
+### Content Safety
+
+```bash
+# Maximum tweet length
+export MAX_TWEET_LEN=240
+
+# Enable content filtering
+export FF_SAFETY=true
+```
+
+**How it works:**
+- Filters content for safety and appropriateness
+- Enforces character limits
+- Blocks taboo topics and patterns
+- Configurable safety rules
+
+## Memory Configuration
+
+### Memory Management
+
+```bash
+# Maximum memories to keep
+export MAX_MEMORIES=1000
+
+# Memory decay factor
+export MEMORY_DECAY=0.95
+
+# Shortlist size for recent memories
+export MEMORY_SHORTLIST=60
+```
+
+**How it works:**
+- Limits memory storage size
+- Applies decay to older memories
+- Uses shortlist for performance
+- Configurable memory management
+
+### Theme Tracking
+
+```bash
+# Maximum themes to track
+export MAX_THEMES=100
+
+# Theme score decay
+export THEME_DECAY=0.98
+```
+
+**How it works:**
+- Tracks popular themes and topics
+- Applies score decay over time
+- Influences content generation
+- Configurable theme management
+
+## API Configuration
+
+### Rate Limiting
+
+```bash
+# Request delay (seconds)
+export API_DELAY=1
+
+# Retry attempts
+export API_RETRIES=3
+
+# Rate limit backoff (minutes)
+export RATE_LIMIT_BACKOFF=15
+```
+
+**How it works:**
+- Adds delays between API requests
+- Handles rate limiting gracefully
+- Configurable retry logic
+- Automatic backoff on rate limits
+
+### Model Configuration
+
+```bash
+# Claude model to use
+export CLAUDE_MODEL="claude-3-5-sonnet-20241022"
+
+# OpenAI model for embeddings
+export OPENAI_MODEL="text-embedding-3-small"
+
+# DALL-E model for images
+export DALLE_MODEL="dall-e-3"
+```
+
+**How it works:**
+- Configurable AI models
+- Supports different model versions
+- Easy model switching
+- Version-specific optimizations
+
+## Configuration Examples
+
+### Minimal Configuration
+
+```bash
+# Basic setup with minimal features
+export FF_DAILY_DIARY=false
+export FF_DAILY_CELEBRATE=false
+export FF_DREAMS=false
+export FF_FRIEND_BONDING=false
+export FF_EXPLAIN=false
+export DAILY_CAP=4
+export MEAN_GAP_MIN=180
+```
+
+### Full Feature Configuration
+
+```bash
+# Full feature set with all capabilities
+export FF_DAILY_DIARY=true
+export FF_DAILY_CELEBRATE=true
+export FF_DREAMS=true
+export FF_FRIEND_BONDING=true
+export FF_EXPLAIN=true
+export FF_IMAGES=true
+export DAILY_CAP=8
+export MEAN_GAP_MIN=120
+```
+
+### High-Frequency Configuration
+
+```bash
+# More frequent posting
+export DAILY_CAP=12
+export MEAN_GAP_MIN=60
+export MIN_GAP_MIN=15
+export FF_DAILY_DIARY=true
+export FF_DAILY_CELEBRATE=true
+```
+
+### Low-Frequency Configuration
+
+```bash
+# Less frequent posting
+export DAILY_CAP=3
+export MEAN_GAP_MIN=240
+export MIN_GAP_MIN=60
+export FF_DAILY_DIARY=false
+export FF_DAILY_CELEBRATE=false
+```
+
+## Feature Interactions
+
+### Dependent Features
+
+Some features depend on others:
+
+```bash
+# Friend bonding requires social interaction
+FF_FRIEND_BONDING=true  # Requires mentions and replies
+
+# Dream posts require sleep cycle awareness
+FF_DREAMS=true  # Requires WAKE_HOUR and SLEEP_HOUR
+
+# Image generation requires OpenAI API
+FF_IMAGES=true  # Requires OPENAI_API_KEY
+```
+
+### Feature Combinations
+
+Recommended feature combinations:
+
+<AccordionGroup>
+<Accordion title="Beginner Setup">
+```bash
+FF_DAILY_DIARY=true
+FF_DAILY_CELEBRATE=true
+FF_DREAMS=false
+FF_FRIEND_BONDING=false
+FF_EXPLAIN=false
+DAILY_CAP=4
+```
+</Accordion>
+
+<Accordion title="Social Agent">
+```bash
+FF_DAILY_DIARY=true
+FF_DAILY_CELEBRATE=true
+FF_DREAMS=true
+FF_FRIEND_BONDING=true
+FF_EXPLAIN=false
+DAILY_CAP=6
+```
+</Accordion>
+
+<Accordion title="Content Creator">
+```bash
+FF_DAILY_DIARY=true
+FF_DAILY_CELEBRATE=true
+FF_DREAMS=true
+FF_IMAGES=true
+FF_EXPLAIN=true
+DAILY_CAP=8
+```
+</Accordion>
+
+<Accordion title="Research Mode">
+```bash
+FF_DAILY_DIARY=true
+FF_DAILY_CELEBRATE=true
+FF_DREAMS=true
+FF_FRIEND_BONDING=true
+FF_EXPLAIN=true
+FF_DEBUG=true
+DAILY_CAP=10
+```
+</Accordion>
+</AccordionGroup>
+
+## Configuration Validation
+
+### Health Check
+
+Run health check to verify configuration:
+
+```bash
+python -m ollie.cli doctor
+```
+
+### Feature Test
+
+Test specific features:
+
+```bash
+# Test diary posting
+python -m ollie.cli diary
+
+# Test celebration posting
+python -m ollie.cli celebrate
+
+# Test dream posting (during sleep hours)
+python -m ollie.cli dream
+
+# Test image generation
+python -m ollie.cli post_image
+```
+
+### Configuration Review
+
+Review current configuration:
+
+```python
+# Check current feature flags
+python -c "
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+features = [
+    'FF_DAILY_DIARY',
+    'FF_DAILY_CELEBRATE', 
+    'FF_DREAMS',
+    'FF_FRIEND_BONDING',
+    'FF_EXPLAIN',
+    'FF_IMAGES'
+]
+
+for feature in features:
+    value = os.getenv(feature, 'false').lower() == 'true'
+    print(f'{feature}: {value}')
+"
+```
+
+## Best Practices
+
+### Feature Selection
+
+<Steps>
+<Step title="Start Simple">
+Begin with basic features and gradually enable more complex ones as you become familiar with the system.
+</Step>
+
+<Step title="Monitor Performance">
+Track API usage and costs when enabling new features, especially image generation and O5 reasoning.
+</Step>
+
+<Step title="Test Thoroughly">
+Test each feature individually before running in autonomous mode.
+</Step>
+
+<Step title="Document Changes">
+Keep track of configuration changes and their effects on agent behavior.
+</Step>
+</Steps>
+
+### Performance Optimization
+
+```bash
+# Optimize for lower API costs
+FF_IMAGES=false
+FF_O5_REASONING=false
+DAILY_CAP=4
+MEAN_GAP_MIN=180
+
+# Optimize for engagement
+FF_FRIEND_BONDING=true
+FF_DAILY_DIARY=true
+DAILY_CAP=8
+MEAN_GAP_MIN=120
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Environment Setup" icon="gear" href="/config/environment">
+  Set up your API keys and environment variables.
+</Card>
+
+<Card title="Stage Configuration" icon="growth" href="/config/stages">
+  Customize developmental stages and progression.
+</Card>
+
+<Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+  Get started with your configured features.
+</Card>
+
+<Card title="Usage Commands" icon="terminal" href="/usage/commands">
+  Learn how to use your configured features.
+</Card>
+</CardGroup>
+

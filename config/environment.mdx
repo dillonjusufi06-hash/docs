@@ -1,0 +1,467 @@
+---
+title: "Environment Configuration"
+description: "Setting up your AGI Experiment environment"
+---
+
+## Overview
+
+AGI Experiment requires several API keys and environment variables to function properly. This guide covers all the necessary configuration steps to get your agent running.
+
+## Required API Keys
+
+### OpenAI API Key
+
+Required for:
+- Text embeddings (memory system)
+- DALL-E image generation
+- Content safety filtering
+
+```bash
+# Get your API key from: https://platform.openai.com/api-keys
+export OPENAI_API_KEY="sk-..."
+```
+
+<Warning>
+Keep your API key secure and never commit it to version control.
+</Warning>
+
+### Anthropic API Key
+
+Required for:
+- Primary content generation (Claude)
+- Stage-specific prompt generation
+- Reply generation
+
+```bash
+# Get your API key from: https://console.anthropic.com/
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+### Twitter/X API Credentials
+
+Required for:
+- Posting tweets and replies
+- Fetching mentions and timeline
+- Getting engagement metrics
+
+```bash
+# Get credentials from: https://developer.twitter.com/
+export X_API_KEY="your_api_key"
+export X_API_SECRET="your_api_secret"
+export X_ACCESS_TOKEN="your_access_token"
+export X_ACCESS_TOKEN_SECRET="your_access_token_secret"
+export X_BEARER_TOKEN="your_bearer_token"
+```
+
+<Info>
+You'll need a Twitter Developer account with elevated access for full functionality.
+</Info>
+
+## Environment File Setup
+
+### Create `.env` File
+
+Create a `.env` file in your project root:
+
+```bash
+# OpenAI Configuration
+OPENAI_API_KEY=sk-your-openai-key-here
+
+# Anthropic Configuration  
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-key-here
+
+# Twitter/X API Configuration
+X_API_KEY=your_twitter_api_key
+X_API_SECRET=your_twitter_api_secret
+X_ACCESS_TOKEN=your_twitter_access_token
+X_ACCESS_TOKEN_SECRET=your_twitter_access_token_secret
+X_BEARER_TOKEN=your_twitter_bearer_token
+
+# Optional: Custom Configuration
+FF_EXPLAIN=false
+FF_DAILY_DIARY=true
+FF_DAILY_CELEBRATE=true
+FF_DREAMS=true
+FF_FRIEND_BONDING=true
+```
+
+### Load Environment Variables
+
+The system automatically loads from `.env`:
+
+```python
+# In config.py
+from dotenv import load_dotenv
+load_dotenv()
+
+# Access environment variables
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+```
+
+## API Key Setup Guides
+
+### OpenAI Setup
+
+<Steps>
+<Step title="Create Account">
+1. Go to [OpenAI Platform](https://platform.openai.com/)
+2. Sign up or log in to your account
+3. Navigate to API keys section
+</Step>
+
+<Step title="Generate API Key">
+1. Click "Create new secret key"
+2. Give it a descriptive name (e.g., "AGI Experiment")
+3. Copy the key immediately (you won't see it again)
+4. Set appropriate usage limits
+</Step>
+
+<Step title="Configure Billing">
+1. Add a payment method
+2. Set usage limits to control costs
+3. Monitor usage in the dashboard
+</Step>
+</Steps>
+
+### Anthropic Setup
+
+<Steps>
+<Step title="Create Account">
+1. Go to [Anthropic Console](https://console.anthropic.com/)
+2. Sign up or log in to your account
+3. Navigate to API keys section
+</Step>
+
+<Step title="Generate API Key">
+1. Click "Create Key"
+2. Give it a descriptive name
+3. Copy the key immediately
+4. Set usage limits if desired
+</Step>
+
+<Step title="Configure Usage">
+1. Monitor usage in the console
+2. Set spending limits
+3. Review rate limits
+</Step>
+</Steps>
+
+### Twitter/X API Setup
+
+<Steps>
+<Step title="Apply for Developer Account">
+1. Go to [Twitter Developer Portal](https://developer.twitter.com/)
+2. Apply for a developer account
+3. Provide use case details
+4. Wait for approval (can take days/weeks)
+</Step>
+
+<Step title="Create App">
+1. Create a new app in the developer portal
+2. Set app permissions to "Read and Write"
+3. Generate API keys and tokens
+4. Enable OAuth 2.0 if needed
+</Step>
+
+<Step title="Get Credentials">
+1. Copy API Key and Secret
+2. Generate Access Token and Secret
+3. Copy Bearer Token
+4. Test API access
+</Step>
+</Steps>
+
+## Configuration Options
+
+### Feature Flags
+
+Control which features are enabled:
+
+```bash
+# Content generation features
+FF_DAILY_DIARY=true          # Daily diary posts
+FF_DAILY_CELEBRATE=true      # Stage celebration posts  
+FF_DREAMS=true               # Dream posts during sleep hours
+FF_FRIEND_BONDING=true       # Friend relationship tracking
+
+# Debugging and monitoring
+FF_EXPLAIN=false             # Detailed explanations in logs
+FF_DEBUG=false               # Debug mode (verbose logging)
+
+# Experimental features
+FF_O5_REASONING=false        # O5 reasoning system (experimental)
+```
+
+### Timing Configuration
+
+```bash
+# Posting frequency
+MEAN_GAP_MIN=120             # Average 2 hours between posts
+MIN_GAP_MIN=30               # Minimum 30 minutes between posts
+DAILY_CAP=8                  # Maximum 8 posts per day
+
+# Wake/sleep cycle
+WAKE_HOUR=8                  # Wake at 8 AM
+SLEEP_HOUR=22                # Sleep at 10 PM
+```
+
+### Growth Configuration
+
+```bash
+# Stage progression thresholds
+CHILD_DAYS=7                 # Days in child stage
+TWEEN_DAYS=14                # Days in tween stage  
+TEEN_DAYS=21                 # Days in teen stage
+
+# Reward coefficients
+REWARD_LIKE=1.0              # Points per like
+REWARD_REPLY=3.0             # Points per reply
+REWARD_RETWEET=2.0           # Points per retweet
+REWARD_BOOKMARK=1.5          # Points per bookmark
+```
+
+## Environment Validation
+
+### Health Check
+
+Run the built-in health check to verify your configuration:
+
+```bash
+python -m ollie.cli doctor
+```
+
+**Expected Output:**
+```
+[OK] ENV variables
+[OK] JSON storage — memories=0, themes=0, friends=0
+[OK] OpenAI embeddings — dim=1536
+[OK] Claude draft — i saw a nice cloud today 🐣
+[OK] OpenAI Images (DALL·E) — /tmp/ollie_1756848549.jpg
+[OK] X API credentials — skipped to avoid rate limiting
+[OK] Last action — 2025-09-02T21:30:26.848069+00:00
+
+Summary: ALL GOOD ✅
+```
+
+### Manual Validation
+
+Test individual components:
+
+```python
+# Test OpenAI embeddings
+from ollie.memory import embed_text
+embedding = embed_text("test")
+print(f"Embedding dimension: {len(embedding)}")
+
+# Test Claude generation
+from ollie.ai import Claude
+claude = Claude()
+response = claude.generate("You are a helpful assistant.", "Say hello", max_tokens=10)
+print(f"Claude response: {response}")
+
+# Test X API
+from ollie.client import XClient
+xc = XClient()
+user = xc.fetch_user_tweets(limit=1)
+print(f"X API working: {len(user) >= 0}")
+```
+
+## Security Best Practices
+
+### API Key Security
+
+<Warning>
+Never commit API keys to version control or share them publicly.
+</Warning>
+
+```bash
+# Add .env to .gitignore
+echo ".env" >> .gitignore
+
+# Use environment variables in production
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Rotate keys regularly
+# Set up monitoring for unusual usage
+```
+
+### Access Control
+
+```bash
+# Restrict file permissions
+chmod 600 .env
+
+# Use separate keys for different environments
+# Development: dev keys with limited access
+# Production: prod keys with full access
+```
+
+### Monitoring Usage
+
+```bash
+# Set up usage alerts
+# Monitor API costs
+# Track rate limit usage
+# Review access logs
+```
+
+## Troubleshooting
+
+### Common Issues
+
+<AccordionGroup>
+<Accordion title="API Key Not Found">
+**Error**: `KeyError: 'OPENAI_API_KEY'`
+
+**Solutions**:
+- Check `.env` file exists and is in project root
+- Verify key name matches exactly
+- Restart terminal/application after adding keys
+- Check for typos in key names
+</Accordion>
+
+<Accordion title="Invalid API Key">
+**Error**: `401 Unauthorized` or `Invalid API key`
+
+**Solutions**:
+- Verify key is correct and not expired
+- Check key has required permissions
+- Ensure no extra spaces or characters
+- Try generating a new key
+</Accordion>
+
+<Accordion title="Rate Limit Exceeded">
+**Error**: `429 Too Many Requests`
+
+**Solutions**:
+- Reduce posting frequency
+- Increase delays between requests
+- Check API usage limits
+- Upgrade API plan if needed
+</Accordion>
+
+<Accordion title="Twitter API Issues">
+**Error**: `403 Forbidden` or `401 Unauthorized`
+
+**Solutions**:
+- Verify Twitter Developer account is approved
+- Check app permissions are correct
+- Ensure OAuth tokens are valid
+- Test API access in Twitter Developer Portal
+</Accordion>
+</AccordionGroup>
+
+### Debug Mode
+
+Enable debug mode for detailed logging:
+
+```bash
+export FF_DEBUG=true
+python -m ollie.cli doctor
+```
+
+### Environment Verification
+
+```bash
+# Check all required variables are set
+python -c "
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+required = [
+    'OPENAI_API_KEY',
+    'ANTHROPIC_API_KEY', 
+    'X_API_KEY',
+    'X_API_SECRET',
+    'X_ACCESS_TOKEN',
+    'X_ACCESS_TOKEN_SECRET',
+    'X_BEARER_TOKEN'
+]
+
+missing = [var for var in required if not os.getenv(var)]
+if missing:
+    print(f'Missing variables: {missing}')
+else:
+    print('All required variables are set!')
+"
+```
+
+## Production Deployment
+
+### Environment Variables
+
+For production deployment, set environment variables at the system level:
+
+```bash
+# System-wide environment variables
+sudo nano /etc/environment
+
+# Add your keys
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+# ... other variables
+```
+
+### Docker Configuration
+
+```dockerfile
+# Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+
+# Environment variables will be passed at runtime
+CMD ["python", "-m", "ollie.cli", "run"]
+```
+
+```bash
+# Run with environment variables
+docker run -e OPENAI_API_KEY=sk-... \
+           -e ANTHROPIC_API_KEY=sk-ant-... \
+           -e X_API_KEY=... \
+           agi-experiment
+```
+
+### Cloud Deployment
+
+For cloud platforms, set environment variables in the platform's configuration:
+
+```bash
+# Heroku
+heroku config:set OPENAI_API_KEY=sk-...
+heroku config:set ANTHROPIC_API_KEY=sk-ant-...
+
+# AWS Lambda
+# Set environment variables in Lambda configuration
+
+# Google Cloud Run
+# Set environment variables in Cloud Run configuration
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Feature Configuration" icon="toggle" href="/config/features">
+  Learn about available feature flags and options.
+</Card>
+
+<Card title="Stage Configuration" icon="growth" href="/config/stages">
+  Customize developmental stages and progression.
+</Card>
+
+<Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+  Get started with your configured environment.
+</Card>
+
+<Card title="Installation Guide" icon="download" href="/installation">
+  Complete installation and setup instructions.
+</Card>
+</CardGroup>
+

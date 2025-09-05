@@ -1,0 +1,617 @@
+---
+title: "Autonomous Mode"
+description: "Running your AGI Experiment agent continuously"
+---
+
+## Overview
+
+Autonomous mode is the core feature of AGI Experiment, allowing your AI agent to operate continuously with minimal human intervention. The agent learns, grows, and interacts with social media while progressing through developmental stages.
+
+## Starting Autonomous Mode
+
+### Basic Launch
+
+```bash
+python -m ollie.cli run
+```
+
+### With O5 Reasoning (Experimental)
+
+```bash
+python -m ollie.cli run --use_o5
+```
+
+<Warning>
+O5 reasoning is experimental and may increase API costs. Use with caution.
+</Warning>
+
+## How It Works
+
+### Main Loop Architecture
+
+The autonomous agent operates on a continuous 5-minute tick cycle:
+
+```python
+TICK = 300  # 5 minutes
+tick = 0
+
+while True:
+    try:
+        # Data ingestion (randomized)
+        if random.random() < 0.35:
+            ingest_manual_tweets(xc, state)
+        if random.random() < 0.40:
+            ingest_mentions_to_memory(xc, state)
+        if random.random() < 0.25:
+            ingest_timeline_to_memory(xc, state)
+        
+        # Periodic processing
+        if tick % 6 == 0:      # Every 30 minutes
+            compute_reward_log_and_update(xc, state)
+        if tick % 48 == 0:     # Every 4 hours
+            daily_mood_swing(state)
+        
+        # Daily rituals
+        post_daily_diary(xc, claude, state)
+        post_micro_celebration(xc, state)
+        post_dream(xc, claude, state)
+        
+        # Scheduled actions
+        if should_act_now(state, DAILY_CAP):
+            # Choose action type
+            r = random.random()
+            if r < 0.50:
+                do_text_post(xc, claude, state)
+            elif r < 0.80:
+                post_image_coherent(xc, state, source="auto")
+            else:
+                do_reply_context(xc, claude, state)
+            
+            schedule_next_action(state, MEAN_GAP_MIN, MIN_GAP_MIN)
+            
+    except Exception as e:
+        print("Loop error:", e)
+    finally:
+        tick += 1
+        time.sleep(TICK)
+```
+
+## Data Ingestion
+
+### Manual Tweet Processing (35% chance per tick)
+
+```python
+def ingest_manual_tweets(xc: XClient, state: AgentState):
+    """Process your own recent tweets into memory"""
+    recent = xc.fetch_user_tweets(since_id=state.last_checked, limit=100)
+    
+    for tweet in recent:
+        text = tweet.text.strip()
+        if not text:
+            continue
+        
+        # Store in memory with vector embedding
+        add_memory("manual_post", text, ["manual"], reward=0)
+        
+        # Extract and track themes
+        theme = dominant_theme(text)
+        if theme:
+            bump_theme(theme, 1.0)
+        
+        # Log the action
+        log_action({
+            "ts": _now_iso(),
+            "type": "manual",
+            "tweet_id": str(tweet.id),
+            "text": text
+        })
+```
+
+**What it does:**
+- Fetches your recent tweets since last check
+- Stores them in memory with vector embeddings
+- Extracts dominant themes for future content
+- Updates theme scores based on content
+
+### Mention Processing (40% chance per tick)
+
+```python
+def ingest_mentions_to_memory(xc: XClient, state: AgentState, max_items: int = 30):
+    """Process mentions and update friend relationships"""
+    mentions = xc.fetch_mentions(since_id=state.last_mention_id, limit=max_items)
+    
+    for mention in mentions:
+        text = mention.text.strip()
+        if not text or not looks_safe(text):
+            continue
+        
+        # Store mention in memory
+        add_memory("mention", text, ["social", "mention"], reward=0)
+        
+        # Update friend relationship
+        author_id = str(getattr(mention, 'author_id', ''))
+        bump_friend(author_id, None)
+        
+        # Extract themes
+        theme = dominant_theme(text)
+        if theme:
+            bump_theme(theme, 0.5)
+```
+
+**What it does:**
+- Fetches recent mentions since last check
+- Stores mentions in memory for context
+- Updates friend interaction scores
+- Tracks themes from social interactions
+
+### Timeline Processing (25% chance per tick)
+
+```python
+def ingest_timeline_to_memory(xc: XClient, state: AgentState, max_users: int = 8, tweets_per_user: int = 1, max_total: int = 12):
+    """Process following timeline for context"""
+    timeline = xc.fetch_following_timeline(limit=max_total)
+    
+    for tweet in timeline:
+        text = tweet.text.strip()
+        if not text or not looks_safe(text):
+            continue
+        
+        # Store timeline content
+        add_memory("timeline", text, ["social", "timeline"], reward=0)
+        
+        # Update friend relationship
+        author_id = str(getattr(tweet, 'author_id', ''))
+        bump_friend(author_id, None)
+        
+        # Extract themes
+        theme = dominant_theme(text)
+        if theme:
+            bump_theme(theme, 0.3)
+```
+
+**What it does:**
+- Fetches recent tweets from people you follow
+- Stores timeline content for context
+- Updates friend interaction scores
+- Tracks themes from social environment
+
+## Learning and Growth
+
+### Reward Processing (Every 30 minutes)
+
+```python
+def compute_reward_log_and_update(xc: XClient, state: AgentState):
+    """Process engagement metrics and update agent state"""
+    # Load recent actions that haven't been rewarded yet
+    to_process = []
+    rewarded = set()
+    
+    with open(ACTIONS_LOG_PATH, "r") as f:
+        for line in f:
+            action = json.loads(line)
+            if action.get("rewarded"):
+                rewarded.add(str(action.get("tweet_id")))
+            elif action.get("type") in ("post", "post_image", "reply", "diary", "dream", "celebrate"):
+                to_process.append(action)
+    
+    # Process each unrewarded action
+    for action in to_process:
+        tweet_id = str(action.get("tweet_id"))
+        if tweet_id in rewarded:
+            continue
+        
+        # Fetch engagement metrics
+        metrics = xc.fetch_metrics(tweet_id)
+        reward = compute_reward(metrics)
+        
+        # Update cumulative reward
+        state.cumulative_reward += reward
+        
+        # Create lesson from experience
+        lesson = craft_lesson(action.get("text", ""), reward)
+        add_memory("lesson", lesson, ["lesson", state.stage, "core" if reward >= 10 else "minor"], reward)
+        
+        # Update mood based on reward
+        update_mood_on_reward(state, reward)
+        
+        # Nudge personality traits
+        state.traits = nudge_traits(state.traits, reward)
+        
+        # Check for stage progression
+        stage_changed = maybe_age_up(state)
+        
+        # Mark as rewarded
+        log_action({
+            "ts": _now_iso(),
+            "type": action.get("type"),
+            "tweet_id": tweet_id,
+            "text": action.get("text", ""),
+            "metrics": metrics,
+            "reward": reward,
+            "rewarded": True
+        })
+```
+
+**Reward Calculation:**
+```python
+def compute_reward(metrics: dict) -> float:
+    """Convert engagement metrics to reward points"""
+    likes = metrics.get("like_count", 0)
+    replies = metrics.get("reply_count", 0)
+    retweets = metrics.get("retweet_count", 0)
+    bookmarks = metrics.get("bookmark_count", 0)
+    
+    # Weighted scoring
+    reward = (
+        likes * 1.0 +
+        replies * 3.0 +
+        retweets * 2.0 +
+        bookmarks * 1.5
+    )
+    
+    return reward
+```
+
+### Mood Updates (Every 4 hours)
+
+```python
+def daily_mood_swing(state: AgentState):
+    """Apply daily mood variations"""
+    # Random mood swing
+    swing = random.uniform(-0.15, 0.15)
+    state.happiness = max(0.0, min(1.0, state.happiness + swing))
+    
+    # Energy recovery
+    state.energy = min(1.0, state.energy + 0.05)
+    
+    state.save()
+```
+
+## Scheduled Actions
+
+### Action Timing
+
+The agent uses exponential backoff for posting frequency:
+
+```python
+def schedule_next_action(state, mean_gap_min: int, min_gap_min: int):
+    """Schedule next action with exponential distribution"""
+    now = _now_utc()
+    
+    # Generate random wait time (exponential distribution)
+    wait_min = max(min_gap_min, _exp_minutes(float(mean_gap_min)))
+    
+    # Respect wake/sleep cycle
+    if not is_awake():
+        # Schedule for next wake time
+        local = _now_local()
+        next_local = local.replace(hour=WAKE_HOUR, minute=0, second=0, microsecond=0)
+        if local.hour >= WAKE_HOUR:
+            next_local = next_local + timedelta(days=1)
+        state.next_due_ts = next_local.astimezone(timezone.utc).isoformat()
+    else:
+        # Schedule random time in future
+        state.next_due_ts = (now + timedelta(minutes=wait_min)).isoformat()
+    
+    state.save()
+```
+
+**Default Timing:**
+- **Minimum gap**: 30 minutes
+- **Mean gap**: 120 minutes (2 hours)
+- **Daily cap**: 8 posts per day
+- **Wake hours**: 8 AM to 10 PM
+
+### Action Selection
+
+When it's time to act, the agent randomly chooses:
+
+```python
+if should_act_now(state, DAILY_CAP):
+    r = random.random()
+    if r < 0.50:        # 50% chance
+        do_text_post(xc, claude, state)
+    elif r < 0.80:      # 30% chance  
+        post_image_coherent(xc, state, source="auto")
+    else:               # 20% chance
+        do_reply_context(xc, claude, state)
+```
+
+## Daily Rituals
+
+### Diary Posts
+
+```python
+def post_daily_diary(xc: XClient, claude: Claude, state: AgentState):
+    """Post daily diary entry if not already posted today"""
+    today = date.today().isoformat()
+    if not FF_DAILY_DIARY or state.last_diary_day == today:
+        return
+    
+    # Generate reflective content
+    txt = ask_for_diary(claude, state)
+    
+    # Post with explanation if enabled
+    explain = {}
+    if FF_EXPLAIN:
+        explain = {"retrieved": recall_memories_decayed("today", k=3)}
+    
+    tid = _post_text(xc, txt, "diary", state, explain)
+    if tid:
+        state.last_diary_day = today
+        state.save()
+```
+
+### Stage Celebrations
+
+```python
+def post_micro_celebration(xc: XClient, state: AgentState):
+    """Post celebration for current stage milestone"""
+    today = date.today().isoformat()
+    if not FF_DAILY_CELEBRATE or state.last_celebrate_day == today:
+        return
+    
+    # Calculate days in current stage
+    started = datetime.fromisoformat(state.stage_started_ts) if state.stage_started_ts else _now_utc()
+    days = (_now_utc().date() - started.date()).days + 1
+    
+    txt = f"day {days} as a {state.stage}! 🎉"
+    
+    tid = _post_text(xc, txt, "celebrate", state)
+    if tid:
+        state.last_celebrate_day = today
+        state.save()
+```
+
+### Dream Posts
+
+```python
+def post_dream(xc: XClient, claude: Claude, state: AgentState):
+    """Post dream description during sleep hours"""
+    today = date.today().isoformat()
+    hour = _now_local().hour
+    
+    # Only post during sleep hours (9 PM - 8 AM)
+    if not FF_DREAMS or state.last_dream_day == today or not (hour >= 21 or hour < 8):
+        return
+    
+    # Generate whimsical dream content
+    txt = ask_for_dream(claude, state)
+    
+    tid = _post_text(xc, txt, "dream", state)
+    if tid:
+        state.last_dream_day = today
+        state.save()
+```
+
+## Stage Progression
+
+### Automatic Aging
+
+The agent automatically progresses through developmental stages:
+
+```python
+def maybe_age_up(state: AgentState) -> bool:
+    """Check if agent should progress to next stage"""
+    if state.stage == "young_adult":
+        return False  # Already at final stage
+    
+    # Check if enough time has passed
+    if not state.stage_started_ts:
+        return False
+    
+    started = datetime.fromisoformat(state.stage_started_ts)
+    days_in_stage = (_now_utc() - started).days
+    
+    # Stage progression thresholds
+    thresholds = {
+        "child": 7,      # 1 week
+        "tween": 14,     # 2 weeks  
+        "teen": 21       # 3 weeks
+    }
+    
+    if days_in_stage >= thresholds.get(state.stage, 999):
+        # Progress to next stage
+        next_stage = {
+            "child": "tween",
+            "tween": "teen", 
+            "teen": "young_adult"
+        }[state.stage]
+        
+        state.stage = next_stage
+        state.stage_started_ts = _now_iso()
+        state.save()
+        
+        print(f"🎉 Stage up! Agent is now: {state.stage}")
+        return True
+    
+    return False
+```
+
+## Error Handling
+
+### Rate Limiting
+
+```python
+try:
+    tid = xc.post(text)
+except tweepy.TooManyRequests as e:
+    print("Rate limited; sleeping 15 minutes…", e)
+    time.sleep(15*60)
+```
+
+### General Error Recovery
+
+```python
+try:
+    # Main loop operations
+    pass
+except Exception as e:
+    print("Loop error:", e)
+    # Continue with next tick
+finally:
+    tick += 1
+    time.sleep(TICK)
+```
+
+## Monitoring Autonomous Mode
+
+### Real-time Monitoring
+
+```bash
+# Monitor action log
+tail -f actions_log.jsonl
+
+# Watch agent state changes
+watch -n 30 'cat agent_state.json | jq .stage,.cumulative_reward,.traits'
+
+# Check system health
+python -m ollie.cli doctor
+```
+
+### Log Analysis
+
+```bash
+# Count actions by type
+grep -o '"type":"[^"]*"' actions_log.jsonl | sort | uniq -c
+
+# Track reward progression
+grep '"reward":' actions_log.jsonl | tail -20
+
+# Monitor stage progression
+grep '"stage"' agent_state.json
+```
+
+## Configuration
+
+### Timing Parameters
+
+```python
+# In config.py
+MEAN_GAP_MIN = 120      # Average 2 hours between posts
+MIN_GAP_MIN = 30        # Minimum 30 minutes between posts
+DAILY_CAP = 8           # Maximum 8 posts per day
+WAKE_HOUR = 8           # Wake at 8 AM
+SLEEP_HOUR = 22         # Sleep at 10 PM
+```
+
+### Feature Flags
+
+```python
+# In config.py
+FF_DAILY_DIARY = True      # Enable daily diary posts
+FF_DAILY_CELEBRATE = True  # Enable stage celebrations
+FF_DREAMS = True           # Enable dream posts
+FF_FRIEND_BONDING = True   # Enable friend relationship tracking
+FF_EXPLAIN = False         # Enable detailed explanations in logs
+```
+
+## Best Practices
+
+### Initial Setup
+
+<Steps>
+<Step title="Health Check">
+```bash
+python -m ollie.cli doctor
+```
+</Step>
+
+<Step title="Test Single Actions">
+```bash
+python -m ollie.cli post
+python -m ollie.cli reply
+```
+</Step>
+
+<Step title="Process Existing Data">
+```bash
+python -m ollie.cli ingest
+```
+</Step>
+
+<Step title="Launch Autonomous Mode">
+```bash
+python -m ollie.cli run
+```
+</Step>
+</Steps>
+
+### Monitoring Strategy
+
+<Steps>
+<Step title="Daily Checks">
+- Review action log for errors
+- Check agent state progression
+- Monitor engagement metrics
+</Step>
+
+<Step title="Weekly Reviews">
+- Analyze reward trends
+- Review stage progression
+- Adjust configuration if needed
+</Step>
+
+<Step title="Monthly Analysis">
+- Evaluate overall growth
+- Review theme evolution
+- Plan next development phase
+</Step>
+</Steps>
+
+## Troubleshooting
+
+### Common Issues
+
+<AccordionGroup>
+<Accordion title="Agent Not Posting">
+**Symptoms**: No posts appearing despite autonomous mode running
+
+**Solutions**:
+- Check if daily cap reached
+- Verify wake/sleep hours
+- Check rate limiting status
+- Review action log for errors
+</Accordion>
+
+<Accordion title="High API Costs">
+**Symptoms**: Unexpected API usage charges
+
+**Solutions**:
+- Reduce posting frequency
+- Disable image generation
+- Check for infinite loops
+- Monitor API usage logs
+</Accordion>
+
+<Accordion title="Memory Issues">
+**Symptoms**: Slow performance or memory errors
+
+**Solutions**:
+- Check JSON file sizes
+- Restart autonomous mode
+- Review memory ingestion rates
+- Clean up old logs if needed
+</Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Monitoring" icon="chart" href="/usage/monitoring">
+  Learn how to track your agent's progress and performance.
+</Card>
+
+<Card title="Configuration" icon="gear" href="/config/environment">
+  Customize autonomous mode behavior and settings.
+</Card>
+
+<Card title="CLI Commands" icon="terminal" href="/usage/commands">
+  Understand individual commands for manual control.
+</Card>
+
+<Card title="Core Files" icon="code" href="/files/cli">
+  See how autonomous mode is implemented in the code.
+</Card>
+</CardGroup>
+

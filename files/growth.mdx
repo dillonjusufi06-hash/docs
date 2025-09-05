@@ -1,0 +1,363 @@
+---
+title: "growth.py"
+description: "Growth and stage progression management"
+---
+
+## Overview
+
+The `growth.py` file manages the agent's developmental progression through stages, trait evolution, and reward-based learning. It converts social media engagement into personality changes and determines when the agent should progress to the next developmental stage.
+
+## Core Functions
+
+### Reward Calculation
+
+```python ollie/growth.py
+def compute_reward(metrics: Dict[str, int]) -> float:
+    """Compute reward from engagement metrics"""
+    return sum(REWARD_COEFFS.get(k, 0.0) * int(metrics.get(k, 0)) for k in REWARD_COEFFS)
+```
+
+**Reward Coefficients:**
+```python
+REWARD_COEFFS = {
+    "likes": 1.0,      # Basic positive feedback
+    "replies": 1.2,    # Higher engagement
+    "retweets": 1.5,   # Content sharing
+    "quotes": 0.8,     # Commentary
+    "bookmarks": 2.0   # High value content
+}
+```
+
+**Usage Examples:**
+```python
+# Example engagement metrics
+metrics = {
+    "likes": 8,
+    "replies": 3,
+    "retweets": 1,
+    "quotes": 0,
+    "bookmarks": 2
+}
+
+reward = compute_reward(metrics)
+# Calculation: 8*1.0 + 3*1.2 + 1*1.5 + 0*0.8 + 2*2.0 = 16.1
+print(f"Reward: {reward}")  # 16.1
+```
+
+### Lesson Creation
+
+```python ollie/growth.py
+def craft_lesson(text: str, reward: float) -> str:
+    """Create a lesson from post performance"""
+    from .utils import _now_iso
+    
+    vibe = "kid question" if "?" in (text or "") else "tiny story"
+    if reward >= 8:
+        return f"{_now_iso()}: {vibe} did awesome (reward={reward:.1f}). keep it short, sweet, a little silly."
+    if reward >= 3:
+        return f"{_now_iso()}: solid (reward={reward:.1f}). curious tone works; tiny emoji ok."
+    return f"{_now_iso()}: low (reward={reward:.1f}). simpler words; maybe end with a soft question."
+```
+
+**Usage Examples:**
+```python
+# High-performing post
+lesson = craft_lesson("i saw a rainbow today! 🌈", 16.1)
+# Returns: "2025-09-02T21:18:54.343462+00:00: tiny story did awesome (reward=16.1). keep it short, sweet, a little silly."
+
+# Medium-performing post
+lesson = craft_lesson("what's your favorite color?", 5.2)
+# Returns: "2025-09-02T21:18:54.343462+00:00: solid (reward=5.2). curious tone works; tiny emoji ok."
+
+# Low-performing post
+lesson = craft_lesson("hello world", 1.0)
+# Returns: "2025-09-02T21:18:54.343462+00:00: low (reward=1.0). simpler words; maybe end with a soft question."
+```
+
+### Trait Evolution
+
+```python ollie/growth.py
+def nudge_traits(traits: Traits, reward: float) -> Traits:
+    """Adjust traits based on reward"""
+    delta = max(-1.0, min(1.0, (reward - 3.0) / 20.0))
+    traits.curiosity = float(max(0.0, min(1.0, traits.curiosity + 0.10 * delta)))
+    traits.humor = float(max(0.0, min(1.0, traits.humor + 0.08 * delta)))
+    traits.risk = float(max(0.0, min(1.0, traits.risk + (0.03 if reward >= 8 else -0.02))))
+    return traits.clamp()
+```
+
+**How it works:**
+- **Delta calculation**: `(reward - 3.0) / 20.0` creates a learning signal
+- **Curiosity**: Increases with high rewards, decreases with low rewards
+- **Humor**: Grows with successful content
+- **Risk**: Increases with very high rewards (≥8), decreases otherwise
+
+**Usage Examples:**
+```python
+# High reward (16.1) - positive trait changes
+traits = Traits(curiosity=0.8, humor=0.5, risk=0.1)
+new_traits = nudge_traits(traits, 16.1)
+# curiosity: 0.8 + 0.10 * 0.655 = 0.865
+# humor: 0.5 + 0.08 * 0.655 = 0.552
+# risk: 0.1 + 0.03 = 0.13
+
+# Low reward (1.0) - negative trait changes
+traits = Traits(curiosity=0.8, humor=0.5, risk=0.1)
+new_traits = nudge_traits(traits, 1.0)
+# curiosity: 0.8 + 0.10 * (-0.1) = 0.79
+# humor: 0.5 + 0.08 * (-0.1) = 0.492
+# risk: 0.1 - 0.02 = 0.08
+```
+
+### Mood Updates
+
+```python ollie/growth.py
+def update_mood_on_reward(state: AgentState, reward: float):
+    """Update mood based on reward"""
+    state.happiness = float(max(0.0, min(1.0, state.happiness + 0.03*reward/(reward+5))))
+    state.energy = float(max(0.0, min(1.0, state.energy + 0.02)))
+```
+
+**How it works:**
+- **Happiness**: Increases with rewards, with diminishing returns
+- **Energy**: Slightly increases with any reward
+- **Bounds**: Both values stay within 0.0-1.0 range
+
+**Usage Examples:**
+```python
+# High reward (16.1)
+state.happiness = 0.6
+state.energy = 0.7
+update_mood_on_reward(state, 16.1)
+# happiness: 0.6 + 0.03 * 16.1/(16.1+5) = 0.6 + 0.023 = 0.623
+# energy: 0.7 + 0.02 = 0.72
+
+# Low reward (1.0)
+state.happiness = 0.6
+state.energy = 0.7
+update_mood_on_reward(state, 1.0)
+# happiness: 0.6 + 0.03 * 1.0/(1.0+5) = 0.6 + 0.005 = 0.605
+# energy: 0.7 + 0.02 = 0.72
+```
+
+## Stage Progression
+
+### Age-Up Logic
+
+```python ollie/growth.py
+def maybe_age_up(state: AgentState) -> bool:
+    """Check if agent should progress to next stage"""
+    from .utils import _now_utc
+    
+    now = _now_utc()
+    if not state.stage_started_ts:
+        state.stage_started_ts = now.isoformat()
+        return False
+    
+    try:
+        started = datetime.fromisoformat(state.stage_started_ts)
+    except Exception:
+        started = now - timedelta(days=999)
+    
+    days = (now - started).days
+    
+    if state.stage == "child":
+        if days >= MIN_STAGE_DAYS and state.cumulative_reward >= CHILD_TO_TWEEN_REWARD:
+            state.stage = "tween"
+            state.stage_started_ts = now.isoformat()
+            from .memory import add_memory
+            add_memory("milestone", f"aged up to tween at reward={state.cumulative_reward:.1f}", ["growth","core"], reward=0)
+            return True
+    elif state.stage == "tween":
+        if days >= MIN_STAGE_DAYS and state.cumulative_reward >= TWEEN_TO_TEEN_REWARD:
+            state.stage = "teen"
+            state.stage_started_ts = now.isoformat()
+            from .memory import add_memory
+            add_memory("milestone", f"aged up to teen at reward={state.cumulative_reward:.1f}", ["growth","core"], reward=0)
+            return True
+    elif state.stage == "teen" and ENABLE_YOUNG_ADULT:
+        if days >= MIN_STAGE_DAYS and state.cumulative_reward >= TEEN_TO_YA_REWARD:
+            state.stage = "young_adult"
+            state.stage_started_ts = now.isoformat()
+            from .memory import add_memory
+            add_memory("milestone", f"aged up to young adult at reward={state.cumulative_reward:.1f}", ["growth","core"], reward=0)
+            return True
+    
+    return False
+```
+
+### Stage Requirements
+
+```python
+# Configuration constants
+MIN_STAGE_DAYS = 7                    # Minimum days per stage
+CHILD_TO_TWEEN_REWARD = 80.0          # Reward threshold for tween
+TWEEN_TO_TEEN_REWARD = 300.0          # Reward threshold for teen
+TEEN_TO_YA_REWARD = 650.0             # Reward threshold for young adult
+ENABLE_YOUNG_ADULT = False            # Enable young adult stage
+```
+
+**Stage Progression Examples:**
+```python
+# Child to Tween
+state.stage = "child"
+state.cumulative_reward = 85.0
+state.stage_started_ts = "2025-09-01T00:00:00+00:00"  # 8 days ago
+
+if maybe_age_up(state):
+    print(f"🎉 Stage up! Agent is now: {state.stage}")  # "tween"
+    # Creates milestone memory: "aged up to tween at reward=85.0"
+
+# Tween to Teen
+state.stage = "tween"
+state.cumulative_reward = 320.0
+state.stage_started_ts = "2025-09-01T00:00:00+00:00"  # 8 days ago
+
+if maybe_age_up(state):
+    print(f"🎉 Stage up! Agent is now: {state.stage}")  # "teen"
+    # Creates milestone memory: "aged up to teen at reward=320.0"
+```
+
+## Integration Examples
+
+### CLI Integration
+
+```python
+# cli.py uses growth engine for learning
+def compute_reward_log_and_update(xc: XClient, state: AgentState):
+    for action in to_process:
+        tid = str(action.get("tweet_id"))
+        metrics = xc.fetch_metrics(tid)
+        reward = compute_reward(metrics)
+        
+        # Update cumulative reward
+        state.cumulative_reward += reward
+        
+        # Create lesson
+        lesson = craft_lesson(action.get("text", ""), reward)
+        add_memory("lesson", lesson, ["lesson", state.stage], reward)
+        
+        # Update mood
+        update_mood_on_reward(state, reward)
+        
+        # Evolve traits
+        state.traits = nudge_traits(state.traits, reward)
+        
+        # Check for stage progression
+        stage_changed = maybe_age_up(state)
+        if stage_changed:
+            print(f"🎉 Stage up! Agent is now: {state.stage}")
+```
+
+### Memory Integration
+
+```python
+# growth.py creates milestone memories
+def maybe_age_up(state: AgentState) -> bool:
+    if stage_progression_conditions_met:
+        state.stage = new_stage
+        add_memory("milestone", f"aged up to {new_stage} at reward={state.cumulative_reward:.1f}", ["growth","core"], reward=0)
+        return True
+```
+
+### Agent State Integration
+
+```python
+# growth.py modifies agent state
+def update_mood_on_reward(state: AgentState, reward: float):
+    state.happiness = float(max(0.0, min(1.0, state.happiness + 0.03*reward/(reward+5))))
+    state.energy = float(max(0.0, min(1.0, state.energy + 0.02)))
+
+def nudge_traits(traits: Traits, reward: float) -> Traits:
+    # Modifies traits based on reward
+    return traits
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Growth settings
+OLLIE_MIN_STAGE_DAYS=7                    # Minimum days per stage
+OLLIE_CHILD_TO_TWEEN_REWARD=80.0          # Reward threshold for tween
+OLLIE_TWEEN_TO_TEEN_REWARD=300.0          # Reward threshold for teen
+OLLIE_TEEN_TO_YA_REWARD=650.0             # Reward threshold for young adult
+OLLIE_ENABLE_YOUNG_ADULT=0                # Enable young adult stage
+```
+
+### Reward Coefficients
+
+```python
+# Customizable reward weights
+REWARD_COEFFS = {
+    "likes": 1.0,      # Basic positive feedback
+    "replies": 1.2,    # Higher engagement
+    "retweets": 1.5,   # Content sharing
+    "quotes": 0.8,     # Commentary
+    "bookmarks": 2.0   # High value content
+}
+```
+
+## Example Growth Scenarios
+
+### Successful Content
+
+```python
+# High-performing rainbow post
+metrics = {"likes": 12, "replies": 5, "retweets": 2, "bookmarks": 3}
+reward = compute_reward(metrics)  # 12*1.0 + 5*1.2 + 2*1.5 + 3*2.0 = 24.0
+
+# Creates lesson
+lesson = craft_lesson("i saw a rainbow today! 🌈", 24.0)
+# "2025-09-02T21:18:54.343462+00:00: tiny story did awesome (reward=24.0). keep it short, sweet, a little silly."
+
+# Updates traits positively
+traits = nudge_traits(traits, 24.0)
+# curiosity: +0.105, humor: +0.084, risk: +0.03
+
+# Updates mood
+update_mood_on_reward(state, 24.0)
+# happiness: +0.025, energy: +0.02
+```
+
+### Poor Content
+
+```python
+# Low-performing post
+metrics = {"likes": 1, "replies": 0, "retweets": 0, "bookmarks": 0}
+reward = compute_reward(metrics)  # 1*1.0 = 1.0
+
+# Creates lesson
+lesson = craft_lesson("hello", 1.0)
+# "2025-09-02T21:18:54.343462+00:00: low (reward=1.0). simpler words; maybe end with a soft question."
+
+# Updates traits negatively
+traits = nudge_traits(traits, 1.0)
+# curiosity: -0.01, humor: -0.008, risk: -0.02
+
+# Updates mood slightly
+update_mood_on_reward(state, 1.0)
+# happiness: +0.005, energy: +0.02
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Agent State" icon="user" href="/files/agent">
+  Learn how traits and state are managed and evolved.
+</Card>
+
+<Card title="Memory System" icon="brain" href="/files/memory">
+  Understand how lessons and milestones are stored.
+</Card>
+
+<Card title="CLI Interface" icon="terminal" href="/files/cli">
+  See how growth engine is integrated into the CLI.
+</Card>
+
+<Card title="Configuration" icon="gear" href="/config/stages">
+  Learn how to customize growth parameters.
+</Card>
+</CardGroup>
+

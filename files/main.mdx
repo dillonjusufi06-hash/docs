@@ -1,0 +1,103 @@
+---
+title: "main.py"
+description: "Entry point and application launcher"
+---
+
+## Overview
+
+The `main.py` file serves as the entry point for the AGI Experiment application. It's a simple launcher that delegates to the CLI module.
+
+## Code Breakdown
+
+```python main.py
+#!/usr/bin/env python3
+"""
+AGI Experiment - Autonomous Social Media Agent
+Main entry point
+"""
+
+from ollie.cli import main
+
+if __name__ == "__main__":
+    main()
+```
+
+## What It Does
+
+1. **Shebang Line**: `#!/usr/bin/env python3` makes the file executable as a script
+2. **Import**: Imports the main function from the CLI module
+3. **Entry Point**: Calls the CLI main function when run directly
+
+## Usage
+
+### Direct Execution
+
+```bash
+python main.py
+```
+
+### Module Execution
+
+```bash
+python -m ollie.cli
+```
+
+Both methods achieve the same result - launching the CLI interface.
+
+## File Structure Context
+
+```
+agi-experiment/
+├── main.py          # ← This file (entry point)
+├── ollie/           # Core package
+│   ├── cli.py      # CLI interface (imported here)
+│   └── ...         # Other modules
+└── requirements.txt
+```
+
+## CLI Integration
+
+The main function in `cli.py` handles all the command-line arguments and routing:
+
+```python
+def main():
+    """Main CLI entry point"""
+    parser = argparse.ArgumentParser(description="AGI Experiment – Growth Edition (V7.0)")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    
+    # Add command parsers
+    sub.add_parser("post")
+    sub.add_parser("reply")
+    sub.add_parser("run")
+    # ... more commands
+    
+    args = parser.parse_args()
+    
+    # Route to appropriate command handler
+    if args.cmd == "post":
+        do_text_post(xc, claude, state)
+    elif args.cmd == "reply":
+        do_reply_context(xc, claude, state)
+    # ... more routing
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="CLI Module" icon="terminal" href="/files/cli">
+  Learn about the command-line interface and all available commands.
+</Card>
+
+<Card title="Agent State" icon="user" href="/files/agent">
+  Understand how the agent's personality and state are managed.
+</Card>
+
+<Card title="AI Integration" icon="robot" href="/files/ai">
+  See how Claude AI is integrated for content generation.
+</Card>
+
+<Card title="Usage Guide" icon="play" href="/usage/commands">
+  Learn how to use all the available commands.
+</Card>
+</CardGroup>
+

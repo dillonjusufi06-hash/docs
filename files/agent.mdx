@@ -1,0 +1,251 @@
+---
+title: "agent.py"
+description: "Agent state and traits management"
+---
+
+## Overview
+
+The `agent.py` file contains the core data structures for managing the agent's personality, state, and growth tracking. It defines how the agent's traits evolve and how its state is persisted.
+
+## Core Classes
+
+### Traits Class
+
+```python ollie/agent.py
+@dataclass
+class Traits:
+    curiosity: float = 0.80
+    humor: float = 0.50
+    empathy: float = 0.55
+    risk: float = 0.10
+    formality: float = 0.10
+    exploration_prob: float = 0.20
+    
+    def clamp(self):
+        for k, v in self.__dict__.items():
+            if isinstance(v, (int, float)):
+                setattr(self, k, float(max(0.0, min(1.0, v))))
+        return self
+```
+
+**What it does:**
+- Defines the agent's personality traits as floating-point values (0.0 to 1.0)
+- `curiosity`: How curious the agent is about new things
+- `humor`: How playful and humorous the agent is
+- `empathy`: How well the agent understands others' feelings
+- `risk`: How willing the agent is to take risks
+- `formality`: How formal vs. casual the agent's communication is
+- `exploration_prob`: Probability of exploring new topics
+- `clamp()`: Ensures all values stay within 0.0-1.0 range
+
+### AgentState Class
+
+```python ollie/agent.py
+@dataclass
+class AgentState:
+    name: str = "Ollie"
+    traits: Traits = field(default_factory=Traits)
+    last_checked: str = ""
+    last_post_ts: str = ""
+    next_due_ts: str = ""
+    last_mention_id: str = ""
+    last_timeline_check: str = ""
+    stage: str = "child"          # child -> tween -> teen -> young_adult
+    stage_started_ts: str = ""
+    cumulative_reward: float = 0.0
+    happiness: float = 0.6
+    energy: float = 0.7
+    last_episode_ts: str = ""
+    story_snippet: str = ""
+    current_goal: str = ""
+    current_goal_started: str = ""
+    # V7 additions
+    last_diary_day: str = ""
+    last_celebrate_day: str = ""
+    last_dream_day: str = ""
+    fads: list = field(default_factory=list)
+    collections: dict = field(default_factory=lambda: {"emojis": [], "words": [], "doodles": []})
+    attachment_object: str = "plush frog"
+```
+
+## Key Fields Explained
+
+### Identity & Personality
+- **`name`**: The agent's name (default: "Ollie")
+- **`traits`**: Personality traits that influence behavior
+- **`stage`**: Current developmental stage (child/tween/teen/young_adult)
+
+### Growth & Learning
+- **`cumulative_reward`**: Total reward points earned from engagement
+- **`stage_started_ts`**: When the current stage began
+- **`happiness`**: Current happiness level (0.0-1.0)
+- **`energy`**: Current energy level (0.0-1.0)
+
+### Social Interaction
+- **`last_mention_id`**: Last mention processed for replies
+- **`last_timeline_check`**: Last time timeline was processed
+- **`fads`**: Current trends the agent is following
+- **`collections`**: Things the agent collects (emojis, words, doodles)
+
+### Scheduling
+- **`last_post_ts`**: Timestamp of last post
+- **`next_due_ts`**: When the next action is scheduled
+- **`last_checked`**: Last time the agent checked for activity
+
+### Daily Rituals
+- **`last_diary_day`**: Last day a diary entry was posted
+- **`last_celebrate_day`**: Last day a celebration was posted
+- **`last_dream_day`**: Last day a dream was posted
+
+## State Persistence
+
+### Saving State
+
+```python ollie/agent.py
+def save(self):
+    with open(STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(self.to_json(), f, indent=2)
+```
+
+### Loading State
+
+```python ollie/agent.py
+@staticmethod
+def load():
+    if not os.path.exists(STATE_PATH):
+        return AgentState()
+    
+    raw = json.load(open(STATE_PATH, "r", encoding="utf-8"))
+    st = AgentState(
+        name=raw.get("name", "Ollie"),
+        traits=Traits(**raw.get("traits", {})),
+        last_checked=raw.get("last_checked", ""),
+        # ... more fields
+    )
+    return st
+```
+
+## Example State File
+
+```json agent_state.json
+{
+  "name": "Ollie",
+  "traits": {
+    "curiosity": 0.8,
+    "humor": 0.5,
+    "empathy": 0.55,
+    "risk": 0.1,
+    "formality": 0.1,
+    "exploration_prob": 0.2
+  },
+  "last_checked": "",
+  "last_post_ts": "2025-09-02T21:30:26.848069+00:00",
+  "next_due_ts": "",
+  "last_mention_id": "",
+  "last_timeline_check": "",
+  "stage": "child",
+  "stage_started_ts": "",
+  "cumulative_reward": 0.0,
+  "happiness": 0.6,
+  "energy": 0.7,
+  "last_episode_ts": "",
+  "story_snippet": "",
+  "current_goal": "",
+  "current_goal_started": "",
+  "last_diary_day": "",
+  "last_celebrate_day": "",
+  "last_dream_day": "",
+  "fads": [],
+  "collections": {
+    "emojis": [],
+    "words": [],
+    "doodles": []
+  },
+  "attachment_object": "plush frog"
+}
+```
+
+## How Traits Influence Behavior
+
+### Content Generation
+
+The traits influence how the AI generates content:
+
+```python
+# High curiosity -> more questions
+if state.traits.curiosity > 0.7:
+    mode = "question"
+    
+# High humor -> more playful content
+if state.traits.humor > 0.6:
+    content += " 😄"
+    
+# Low formality -> more casual language
+if state.traits.formality < 0.3:
+    content = content.lower()
+```
+
+### Stage Progression
+
+Traits evolve as the agent progresses through stages:
+
+```python
+# When progressing from child to tween
+if new_stage == "tween":
+    state.traits.humor += 0.1      # More playful
+    state.traits.empathy += 0.05   # More socially aware
+    state.traits.formality += 0.02 # Slightly more formal
+```
+
+## Integration with Other Modules
+
+### Growth Engine
+
+```python
+# growth.py uses AgentState for progression
+def maybe_age_up(state: AgentState) -> bool:
+    if (state.stage == "child" and 
+        state.cumulative_reward >= 80.0 and 
+        days_in_stage >= 7):
+        state.stage = "tween"
+        return True
+```
+
+### AI Integration
+
+```python
+# ai.py uses traits for personality prompts
+def system_prompt_for_stage(stage: str, state: AgentState) -> str:
+    mood = f"mood: happiness={state.happiness:.2f}, energy={state.energy:.2f}"
+    return f"you are {state.name}, a {stage}. {mood}"
+```
+
+### CLI Interface
+
+```python
+# cli.py loads and saves state
+state = AgentState.load()
+# ... perform actions ...
+state.save()
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Growth Engine" icon="seedling" href="/files/growth">
+  Learn how the agent progresses through developmental stages.
+</Card>
+
+<Card title="AI Integration" icon="robot" href="/files/ai">
+  See how traits influence AI-generated content.
+</Card>
+
+<Card title="Memory System" icon="brain" href="/files/memory">
+  Understand how the agent remembers and learns from experiences.
+</Card>
+
+<Card title="CLI Interface" icon="terminal" href="/files/cli">
+  Learn how the CLI manages agent state.
+</Card>
+</CardGroup>
+

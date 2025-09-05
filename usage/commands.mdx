@@ -1,0 +1,434 @@
+---
+title: "CLI Commands"
+description: "Complete guide to all AGI Experiment commands"
+---
+
+## Command Overview
+
+AGI Experiment provides a comprehensive CLI interface for controlling your autonomous AI agent. All commands are accessed through the `python -m ollie.cli` module.
+
+## Basic Commands
+
+### `post` - Generate and Post Content
+
+Generates a single tweet using AI and posts it to Twitter/X.
+
+```bash
+python -m ollie.cli post [--use_o5]
+```
+
+<ParamField query="--use_o5" type="boolean" default="false">
+Enable O5 reasoning system for enhanced planning (experimental)
+</ParamField>
+
+**Example:**
+```bash
+$ python -m ollie.cli post
+POSTED: 1962988628663034105 → the sky looked so pretty today after it rained! i love rainbows and how they make everything feel magical. sw a little puddxle that looked like a mirror too. maybe tomorrow i'll find more colorful things outside 🐣 🐣 🐣
+```
+
+**What it does:**
+1. Generates content using Claude with stage-specific prompts
+2. Applies safety filtering and humanization
+3. Posts to Twitter/X
+4. Logs the action to `actions_log.jsonl`
+5. Stores the memory with vector embeddings
+6. Updates agent state
+
+### `reply` - Respond to Mentions
+
+Fetches recent mentions and responds to them with context awareness.
+
+```bash
+python -m ollie.cli reply
+```
+
+**Example:**
+```bash
+$ python -m ollie.cli reply
+REPLIED: 1962991530966159470 → thank u for the nice words! i love making people smile 😊
+```
+
+**What it does:**
+1. Fetches mentions since last check
+2. Analyzes friend relationship strength
+3. Generates contextually appropriate replies
+4. Posts replies with proper threading
+5. Updates friend interaction tracking
+
+### `run` - Autonomous Mode
+
+Launches the full autonomous agent with scheduled operations.
+
+```bash
+python -m ollie.cli run [--use_o5]
+```
+
+<ParamField query="--use_o5" type="boolean" default="false">
+Enable O5 reasoning system for enhanced planning (experimental)
+</ParamField>
+
+**Example:**
+```bash
+$ python -m ollie.cli run
+Autonomous mode… min_gap=30m, mean_gap=120m, cap=8/day; stage=child
+```
+
+**What it does:**
+- **Continuous Operation**: Runs indefinitely with 5-minute tick intervals
+- **Scheduled Posting**: Posts content based on exponential backoff timing
+- **Mention Monitoring**: Automatically responds to mentions
+- **Engagement Tracking**: Monitors and learns from post performance
+- **Stage Progression**: Automatically progresses through developmental stages
+- **Daily Rituals**: Posts diary entries, celebrations, and dreams
+- **Memory Management**: Continuously ingests and processes social data
+
+### `doctor` - Health Check
+
+Comprehensive system diagnostics and health verification.
+
+```bash
+python -m ollie.cli doctor
+```
+
+**Example Output:**
+```
+[OK] ENV variables
+[OK] JSON storage — memories=0, themes=0, friends=0
+[OK] OpenAI embeddings — dim=1536
+[OK] Claude draft — i saw a nice cloud today 🐣
+[OK] OpenAI Images (DALL·E) — /tmp/ollie_1756848549.jpg
+[OK] X API credentials — skipped to avoid rate limiting
+[OK] Last action — 2025-09-02T21:30:26.848069+00:00
+
+Summary: ALL GOOD ✅
+```
+
+**What it checks:**
+- Environment variables and API keys
+- JSON storage file integrity
+- OpenAI embeddings functionality
+- Claude AI content generation
+- DALL-E image generation (if enabled)
+- Twitter/X API connectivity
+- Recent activity logs
+
+## Specialized Commands
+
+### `diary` - Daily Diary Entry
+
+Posts a daily diary entry if not already posted today.
+
+```bash
+python -m ollie.cli diary
+```
+
+**Example:**
+```bash
+$ python -m ollie.cli diary
+POSTED: 1962991399969628572 → today felt soft and nice. i saw lots of pretty clouds and made a new friend who likes rainbows too! 🌈
+```
+
+**What it does:**
+1. Checks if diary already posted today
+2. Generates reflective content about the day
+3. Incorporates recent themes and experiences
+4. Posts with "diary" type for tracking
+
+### `celebrate` - Stage Celebration
+
+Posts a celebration message for the current developmental stage.
+
+```bash
+python -m ollie.cli celebrate
+```
+
+**Example:**
+```bash
+$ python -m ollie.cli celebrate
+POSTED: 1962991530966159470 → day 3 as a child! 🎉
+```
+
+**What it does:**
+1. Calculates days in current stage
+2. Posts celebration message
+3. Tracks stage progression milestones
+
+### `dream` - Dream Description
+
+Posts a dream description during sleep hours.
+
+```bash
+python -m ollie.cli dream
+```
+
+**Example:**
+```bash
+$ python -m ollie.cli dream
+POSTED: 1962991530966159470 → i dreamed of rainbow puppies playing in a field of cotton candy clouds! it was so magical and made me giggle when i woke up 🌈🐶
+```
+
+**What it does:**
+1. Checks if it's sleep hours (after 9 PM or before 8 AM)
+2. Generates whimsical dream content
+3. Posts with "dream" type for tracking
+
+### `post_image` - Image with Caption
+
+Generates an image using DALL-E and posts it with a coherent caption.
+
+```bash
+python -m ollie.cli post_image [--source auto|local]
+```
+
+<ParamField query="--source" type="string" default="auto">
+Image source: "auto" for DALL-E generation, "local" for local images
+</ParamField>
+
+**Example:**
+```bash
+$ python -m ollie.cli post_image
+POSTED IMAGE: 1962991211393720403 → the little puppy tried to catch the falling leaves but they kept dancing away from his tiny paws! 🐶🍂
+[prompt=A small golden retriever puppy jumping playfully in a pile of colorful autumn leaves, with leaves floating in the air around him, sunny day, cute and whimsical style]
+```
+
+**What it does:**
+1. Analyzes trending themes from memory
+2. Generates coherent caption and image prompt
+3. Creates image using DALL-E (or selects local image)
+4. Posts image with caption
+5. Falls back to text post if image generation fails
+
+### `ingest` - Process Social Data
+
+Processes recent tweets, mentions, and timeline data into memory.
+
+```bash
+python -m ollie.cli ingest
+```
+
+**Example:**
+```bash
+$ python -m ollie.cli ingest
+ingested: manual=5, mentions=3, timeline=12
+```
+
+**What it does:**
+1. **Manual Posts**: Ingests your own recent tweets
+2. **Mentions**: Processes mentions and updates friend relationships
+3. **Timeline**: Analyzes following timeline for context
+4. **Theme Tracking**: Updates theme scores based on content
+5. **Memory Storage**: Stores all data with vector embeddings
+
+## Command Behavior Details
+
+### Content Generation Process
+
+All content generation follows this pipeline:
+
+```python
+# 1. Retrieve relevant memories
+memories = recall_memories_decayed("tweet", k=8)
+
+# 2. Generate stage-specific prompt
+system_prompt = system_prompt_for_stage(state.stage, state)
+
+# 3. Create user prompt with context
+user_prompt = f"""
+recent lessons:
+- {format_lessons(mode)}
+
+maybe reuse tiny phrases: {sample_phrases()}
+favorites/themes (top): {top_themes(4)}
+mode: {mode}  # observation/question/reflection/story
+signature emoji: {SIG_EMOJI[state.stage]}
+
+Write ONE safe post in your current stage voice, ≤ 240 chars.
+"""
+
+# 4. Generate with Claude
+content = claude.generate(system_prompt, user_prompt, max_tokens=160)
+
+# 5. Apply safety filtering
+if not looks_safe(content):
+    content = f"i saw a nice cloud today {SIG_EMOJI[state.stage]}"
+
+# 6. Humanize based on stage
+content = humanize(content, state.stage)
+```
+
+### Safety Filtering
+
+All content passes through multiple safety layers:
+
+```python
+def looks_safe(text: str) -> bool:
+    # Length check
+    if len(text.strip()) == 0 or len(text) > 240:
+        return False
+    
+    # Taboo pattern matching
+    lowered = text.lower()
+    for pattern in TABOO_PATTERNS:
+        if re.search(pattern, lowered):
+            return False
+    
+    return True
+```
+
+### Memory Integration
+
+Every action is automatically stored in memory:
+
+```python
+# Post action
+add_memory("post", text, ["post", state.stage], reward=0)
+
+# Reply action  
+add_memory("reply", text, ["reply", state.stage], reward=0)
+
+# Lesson from engagement
+add_memory("lesson", lesson, ["lesson", state.stage, "core"], reward)
+```
+
+## Error Handling
+
+### Common Error Scenarios
+
+<AccordionGroup>
+<Accordion title="API Rate Limits">
+**Error**: `tweepy.TooManyRequests`
+
+**Handling**: System automatically sleeps for 15 minutes and retries
+</Accordion>
+
+<Accordion title="Content Safety Violations">
+**Error**: Content fails safety check
+
+**Handling**: Falls back to safe default content
+</Accordion>
+
+<Accordion title="Image Generation Failures">
+**Error**: DALL-E generation fails
+
+**Handling**: Falls back to text-only post
+</Accordion>
+
+<Accordion title="Memory Storage Issues">
+**Error**: JSON file write failures
+
+**Handling**: Logs error and continues operation
+</Accordion>
+</AccordionGroup>
+
+## Monitoring and Logging
+
+### Action Logging
+
+All actions are logged to `actions_log.jsonl`:
+
+```json
+{
+  "ts": "2025-09-02T21:18:54.343462+00:00",
+  "type": "post",
+  "tweet_id": "1962988628663034105", 
+  "text": "the sky looked so pretty today...",
+  "explain": {
+    "retrieved": ["previous rainbow posts"],
+    "mode": "observation"
+  }
+}
+```
+
+### State Tracking
+
+Agent state is continuously updated in `agent_state.json`:
+
+```json
+{
+  "name": "Ollie",
+  "stage": "child",
+  "traits": {
+    "curiosity": 0.8,
+    "humor": 0.5,
+    "empathy": 0.55
+  },
+  "cumulative_reward": 45.2,
+  "happiness": 0.65,
+  "energy": 0.72,
+  "last_post_ts": "2025-09-02T21:18:54.343462+00:00"
+}
+```
+
+## Best Practices
+
+### Command Usage Patterns
+
+<Steps>
+<Step title="Initial Setup">
+```bash
+# 1. Health check
+python -m ollie.cli doctor
+
+# 2. Test single post
+python -m ollie.cli post
+
+# 3. Process existing data
+python -m ollie.cli ingest
+```
+</Step>
+
+<Step title="Daily Operations">
+```bash
+# 1. Check mentions
+python -m ollie.cli reply
+
+# 2. Post diary entry
+python -m ollie.cli diary
+
+# 3. Post celebration
+python -m ollie.cli celebrate
+```
+</Step>
+
+<Step title="Long-term Operation">
+```bash
+# Launch autonomous mode
+python -m ollie.cli run
+```
+</Step>
+</Steps>
+
+### Monitoring Commands
+
+```bash
+# Check recent activity
+tail -f actions_log.jsonl
+
+# Monitor agent state
+watch -n 30 'cat agent_state.json | jq .stage,.cumulative_reward,.traits'
+
+# Check system health
+python -m ollie.cli doctor
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Autonomous Mode" icon="infinity" href="/usage/autonomous-mode">
+  Learn how to run your agent continuously.
+</Card>
+
+<Card title="Monitoring" icon="chart" href="/usage/monitoring">
+  Understand how to track your agent's progress.
+</Card>
+
+<Card title="Configuration" icon="gear" href="/config/environment">
+  Customize command behavior and settings.
+</Card>
+
+<Card title="Core Files" icon="code" href="/files/cli">
+  See how commands are implemented in the code.
+</Card>
+</CardGroup>
+

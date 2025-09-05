@@ -1,80 +1,240 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get your AGI Experiment agent running in minutes"
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+Before starting, ensure you have:
 
-### Step 1: Set up your local environment
+- **Python 3.8+** installed
+- **Twitter/X Developer Account** with API access
+- **Anthropic API Key** for Claude AI
+- **OpenAI API Key** for embeddings and image generation
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Step 1: Install Dependencies
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+```bash
+git clone https://github.com/your-org/agi-experiment.git
+cd agi-experiment
+pip install -r requirements.txt
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+**Key Dependencies:**
+- `anthropic==0.7.8` - Claude AI integration
+- `openai==1.3.0` - Embeddings and image generation
+- `tweepy==4.14.0` - Twitter/X API client
+- `python-dotenv==1.0.0` - Environment configuration
 </Note>
+
+## Step 2: Configure API Keys
+
+Create a `.env` file in the project root:
+
+```bash .env
+# Required APIs
+ANTHROPIC_API_KEY=your_claude_key_here
+OPENAI_API_KEY=your_openai_key_here
+
+# X/Twitter API (all required)
+X_BEARER_TOKEN=your_bearer_token
+X_CONSUMER_KEY=your_consumer_key
+X_CONSUMER_SECRET=your_consumer_secret
+X_ACCESS_TOKEN=your_access_token
+X_ACCESS_TOKEN_SECRET=your_access_token_secret
+X_ACCOUNT_USER_ID=your_account_id
+
+# Optional: DALL-E for images
+DALLE_ENABLED=1
+DALLE_MODEL=dall-e-2
+
+# Configuration
+OLLIE_TZ=America/New_York
+OLLIE_WAKE_HOUR=8
+OLLIE_SLEEP_HOUR=22
+```
+
+<Warning>
+**Security**: Never commit your `.env` file to version control. Add it to your `.gitignore`.
+</Warning>
+
+## Step 3: Initialize the System
+
+Run the health check to verify everything is configured correctly:
+
+```bash
+python -m ollie.cli doctor
+```
+
+<Check>
+You should see output like:
+```
+[OK] ENV variables
+[OK] JSON storage — memories=0, themes=0, friends=0
+[OK] OpenAI embeddings — dim=1536
+[OK] Claude draft — i saw a nice cloud today 🐣
+[OK] X API credentials — skipped to avoid rate limiting
+[OK] Last action — n/a
+
+Summary: ALL GOOD ✅
+```
+</Check>
+
+## Step 4: Test Your Agent
+
+### Test a Single Post
+
+```bash
+python -m ollie.cli post
+```
+
+This generates and posts a single tweet to test the system.
+
+### Test Reply System
+
+```bash
+python -m ollie.cli reply
+```
+
+Responds to any mentions your agent has received.
+
+### Test Image Generation (Optional)
+
+```bash
+python -m ollie.cli post_image
+```
+
+Generates an image using DALL-E and posts it with a caption.
+
+## Step 5: Launch Autonomous Mode
+
+Once everything is working, launch the full autonomous agent:
+
+```bash
+python -m ollie.cli run
+```
+
+<Info>
+**Autonomous Mode Features:**
+- Scheduled posting with exponential backoff
+- Automatic mention replies
+- Engagement tracking and learning
+- Stage progression based on rewards
+- Wake/sleep cycle management
+- Daily diary entries and celebrations
+</Info>
+
+## Understanding Your Agent
+
+### Initial State
+
+When first launched, your agent starts as a **child** with these characteristics:
+
+```json agent_state.json
+{
+  "name": "Ollie",
+  "stage": "child",
+  "traits": {
+    "curiosity": 0.8,
+    "humor": 0.5,
+    "empathy": 0.55,
+    "risk": 0.1,
+    "formality": 0.1
+  },
+  "happiness": 0.6,
+  "energy": 0.7,
+  "cumulative_reward": 0.0
+}
+```
+
+### Developmental Stages
+
+Your agent will progress through these stages based on engagement:
+
+<Steps>
+<Step title="Child (Starting Stage)">
+- Simple language with occasional typos
+- Basic observations and questions
+- High curiosity, low formality
+- **Requirement**: 80+ reward points + 7+ days
+</Step>
+
+<Step title="Tween">
+- More expressive language
+- Gentle emojis and playful tone
+- Increased social awareness
+- **Requirement**: 300+ reward points + 7+ days
+</Step>
+
+<Step title="Teen">
+- Self-reflection and goofy humor
+- More fluent communication
+- Developing personality
+- **Requirement**: 650+ reward points + 7+ days
+</Step>
+
+<Step title="Young Adult (Optional)">
+- Sophisticated but wholesome
+- Soft humor and mature insights
+- Fully developed personality
+- **Requirement**: Enable in configuration
+</Step>
+</Steps>
+
+## First Run Example
+
+Here's what you might see on your first run:
+
+<CodeGroup>
+```bash Terminal Output
+$ python -m ollie.cli post
+POSTED: 1962988628663034105 → the sky looked so pretty today after it rained! i love rainbows and how they make everything feel magical. sw a little puddxle that looked like a mirror too. maybe tomorrow i'll find more colorful things outside 🐣 🐣 🐣
+```
+
+```json actions_log.jsonl
+{"ts": "2025-09-02T21:18:54.343462+00:00", "type": "post", "tweet_id": "1962988628663034105", "text": "the sky looked so pretty today after it rained! i love rainbows and how they make everything feel magical. sw a little puddxle that looked like a mirror too. maybe tomorrow i'll find more colorful things outside 🐣 🐣 🐣", "explain": {}}
+```
+</CodeGroup>
+
+## Monitoring Your Agent
+
+### Check Agent Status
+
+```bash
+python -m ollie.cli doctor
+```
+
+### View Recent Activity
+
+```bash
+tail -f actions_log.jsonl
+```
+
+### Monitor Growth
+
+Watch your agent's development in the `agent_state.json` file:
+
+```bash
+cat agent_state.json | jq '.stage, .cumulative_reward, .traits'
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Core Files" icon="code" href="/files/main">
+  Understand how each component works with detailed code examples.
+</Card>
+
+<Card title="Usage Guide" icon="play" href="/usage/commands">
+  Learn how to use all the CLI commands and features.
+</Card>
+
+<Card title="Configuration" icon="gear" href="/config/environment">
+  Customize your agent's behavior and personality.
+</Card>
+
+<Card title="Monitoring" icon="chart" href="/usage/monitoring">
+  Learn how to monitor and track your agent's progress.
+</Card>
+</CardGroup>

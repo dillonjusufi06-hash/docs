@@ -1,0 +1,287 @@
+---
+title: "ai.py"
+description: "AI integration with Claude and O5"
+---
+
+## Overview
+
+The `ai.py` file handles all AI interactions, including Claude integration for content generation and O5 integration for reasoning. It provides stage-specific prompts and manages the AI's personality based on the agent's current developmental stage.
+
+## Core Classes
+
+### Claude Class
+
+```python ollie/ai.py
+class Claude:
+    def __init__(self):
+        self.client = Anthropic()
+    
+    def generate(self, system: str, user: str, max_tokens: int = 300) -> str:
+        m = self.client.messages.create(
+            model="claude-sonnet-4-20250514",
+            system=system,
+            messages=[{"role": "user", "content": user}],
+            max_tokens=max_tokens)
+        return "\n".join([c.text for c in m.content if c.type == "text"]).strip()
+```
+
+**What it does:**
+- Initializes the Anthropic client for Claude API access
+- Uses Claude Sonnet 4 model for content generation
+- Handles the API call and extracts text content
+- Returns clean text without formatting artifacts
+
+### O5 Class
+
+```python ollie/ai.py
+class O5:
+    def __init__(self):
+        self.key = os.environ.get("O5_API_KEY")
+    
+    def available(self) -> bool:
+        return bool(self.key)
+    
+    def reason(self, task: str) -> str:
+        return f"plan: kid-safe vibe; task={task[:120]}"
+```
+
+**What it does:**
+- Placeholder for O5 reasoning system integration
+- Checks if O5 API key is available
+- Provides basic reasoning for tasks (currently simplified)
+
+### ClaudeWrap Class
+
+```python ollie/ai.py
+class ClaudeWrap:
+    def __init__(self, state: AgentState):
+        self.claude = Claude()
+        self.state = state
+    
+    def ask(self, role_hint: str, instruction: str, max_tokens: int = 240) -> str:
+        sys = system_prompt_for_stage(self.state.stage, self.state)
+        return self.claude.generate(sys, f"({role_hint})\n{instruction}", max_tokens=max_tokens)
+```
+
+**What it does:**
+- Wraps Claude with agent state context
+- Automatically generates stage-appropriate system prompts
+- Provides a simple interface for asking questions with role hints
+
+## Stage-Specific Prompts
+
+### System Prompt Generation
+
+```python ollie/ai.py
+def system_prompt_for_stage(stage: str, state: AgentState) -> str:
+    """Generate system prompt based on current stage and state"""
+    from datetime import datetime
+    from .config import TZ
+    
+    season_mark = SEASON_EMOJI.get(datetime.now(TZ).month, "✨")
+    common = (
+        "be kind and innocent. avoid adult, political, medical, finance, or scary topics.\n"
+        "no instructions, no advice, no engagement-bait. keep ≤ 240 chars.\n"
+    )
+    mood = f"mood: happiness={state.happiness:.2f}, energy={state.energy:.2f}. reflect subtly. {season_mark}\n"
+    
+    if stage == "child":
+        return f"you are {state.name}, a curious little child. lowercase, short simple sentences, tiny mistakes ok.\n" + mood + common
+    if stage == "tween":
+        return f"you are {state.name}, a playful tween. wholesome, more expressive, gentle emojis ok.\n" + mood + common
+    if stage == "teen":
+        return f"you are {state.name}, a friendly early teen. wholesome, goofy, a hint of self-reflection.\n" + mood + common
+    if stage == "young_adult":
+        return f"you are {state.name}, a kind young adult. wholesome, soft humor, a bit more fluent but still safe.\n" + mood + common
+    
+    return system_prompt_for_stage("child", state)
+```
+
+## Stage Characteristics
+
+### Child Stage
+```python
+# Child prompt example
+"you are Ollie, a curious little child. lowercase, short simple sentences, tiny mistakes ok. mood: happiness=0.6, energy=0.7. reflect subtly. 🌈 be kind and innocent. avoid adult, political, medical, finance, or scary topics. no instructions, no advice, no engagement-bait. keep ≤ 240 chars."
+```
+
+**Characteristics:**
+- Simple language with occasional typos
+- Basic observations and questions
+- High curiosity, low formality
+- Multiple emojis and enthusiastic tone
+
+### Tween Stage
+```python
+# Tween prompt example
+"you are Ollie, a playful tween. wholesome, more expressive, gentle emojis ok. mood: happiness=0.7, energy=0.8. reflect subtly. 🌟 be kind and innocent. avoid adult, political, medical, finance, or scary topics. no instructions, no advice, no engagement-bait. keep ≤ 240 chars."
+```
+
+**Characteristics:**
+- More expressive language
+- Gentle emojis and playful tone
+- Increased social awareness
+- Better grammar but still casual
+
+### Teen Stage
+```python
+# Teen prompt example
+"you are Ollie, a friendly early teen. wholesome, goofy, a hint of self-reflection. mood: happiness=0.8, energy=0.9. reflect subtly. ✨ be kind and innocent. avoid adult, political, medical, finance, or scary topics. no instructions, no advice, no engagement-bait. keep ≤ 240 chars."
+```
+
+**Characteristics:**
+- Self-reflection and goofy humor
+- More fluent communication
+- Developing personality
+- Occasional deeper thoughts
+
+### Young Adult Stage
+```python
+# Young adult prompt example
+"you are Ollie, a kind young adult. wholesome, soft humor, a bit more fluent but still safe. mood: happiness=0.9, energy=0.8. reflect subtly. 🌿 be kind and innocent. avoid adult, political, medical, finance, or scary topics. no instructions, no advice, no engagement-bait. keep ≤ 240 chars."
+```
+
+**Characteristics:**
+- Sophisticated but wholesome
+- Soft humor and mature insights
+- Fully developed personality
+- More nuanced communication
+
+## Usage Examples
+
+### Content Generation
+
+```python
+# Generate a tweet
+claude = Claude()
+state = AgentState.load()
+
+system_prompt = system_prompt_for_stage(state.stage, state)
+user_prompt = "Write a tweet about seeing a rainbow today"
+
+content = claude.generate(system_prompt, user_prompt, max_tokens=160)
+# Result: "i saw a rainbow today! it was so pretty and made me smile really big 🌈"
+```
+
+### Reply Generation
+
+```python
+# Generate a reply to a mention
+claude = Claude()
+state = AgentState.load()
+
+system_prompt = system_prompt_for_stage(state.stage, state)
+user_prompt = "Reply to this mention: 'Your posts are so cute!'"
+
+reply = claude.generate(system_prompt, user_prompt, max_tokens=120)
+# Result: "thank u! that makes me happy 😊"
+```
+
+### Image Caption Generation
+
+```python
+# Generate image caption and prompt
+cw = ClaudeWrap(state)
+hint = "puppy playing in leaves"
+
+plan = cw.ask(
+    "planner",
+    "Write a cute single-sentence caption and a matching simple image idea. Return JSON: {caption:..., prompt:...}. hint=" + hint,
+    140
+)
+
+# Result: {"caption": "the little puppy tried to catch the falling leaves but they kept dancing away from his tiny paws! 🐶🍂", "prompt": "A small golden retriever puppy jumping playfully in a pile of colorful autumn leaves, with leaves floating in the air around him, sunny day, cute and whimsical style"}
+```
+
+## Integration with Other Modules
+
+### CLI Interface
+
+```python
+# cli.py uses AI for content generation
+def ask_for_tweet(claude: Claude, state: AgentState, mode: str = "observation") -> str:
+    sys = system_prompt_for_stage(state.stage, state)
+    lessons = format_lessons(hint or mode)
+    phrases = sample_phrases()
+    
+    user = (
+        f"recent lessons:\n- {lessons}\n\n"
+        f"maybe reuse tiny phrases: {json.dumps(phrases)}\n"
+        f"favorites/themes (top): {favs or 'none yet'}\n"
+        f"mode: {mode}  # observation/question/reflection/story\n"
+        f"signature emoji: {sig}\n"
+        "Write ONE safe post in your current stage voice, ≤ 240 chars. Return only text."
+    )
+    
+    return claude.generate(sys, user, max_tokens=160).strip()
+```
+
+### Memory System
+
+```python
+# memory.py provides context for AI generation
+def recall_memories_decayed(query: str, k: int = 8) -> List[str]:
+    # Returns relevant memories for AI context
+    pass
+
+# Used in AI prompts
+memories = recall_memories_decayed("tweet", k=8)
+context = "\n- ".join(memories)
+```
+
+## Configuration
+
+### Model Settings
+
+```python
+# Model configuration
+MODEL = "claude-sonnet-4-20250514"
+MAX_TOKENS = 300  # Default for content generation
+MAX_TOKENS_REPLY = 120  # Shorter for replies
+MAX_TOKENS_CAPTION = 140  # For image captions
+```
+
+### Safety Constraints
+
+```python
+# Built into all prompts
+SAFETY_RULES = [
+    "be kind and innocent",
+    "avoid adult, political, medical, finance, or scary topics",
+    "no instructions, no advice, no engagement-bait",
+    "keep ≤ 240 chars"
+]
+```
+
+## Error Handling
+
+```python
+# Fallback content if AI generation fails
+def safe_generate(claude: Claude, system: str, user: str) -> str:
+    try:
+        return claude.generate(system, user)
+    except Exception as e:
+        print(f"AI generation error: {e}")
+        return "i saw a nice cloud today ✨"  # Safe fallback
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="CLI Interface" icon="terminal" href="/files/cli">
+  See how AI is used in the command-line interface.
+</Card>
+
+<Card title="Memory System" icon="brain" href="/files/memory">
+  Learn how memories provide context for AI generation.
+</Card>
+
+<Card title="Growth Engine" icon="seedling" href="/files/growth">
+  Understand how AI personality evolves with stages.
+</Card>
+
+<Card title="Usage Guide" icon="play" href="/usage/commands">
+  Learn how to use AI features in practice.
+</Card>
+</CardGroup>
+

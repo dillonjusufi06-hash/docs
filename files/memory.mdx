@@ -1,0 +1,482 @@
+---
+title: "memory.py"
+description: "Memory management using JSON files with vector embeddings"
+---
+
+## Overview
+
+The `memory.py` file implements a revolutionary memory system that uses JSON files instead of traditional databases, combined with vector embeddings for semantic search. This approach provides persistent memory with semantic understanding while maintaining simplicity and portability.
+
+## Core Architecture
+
+### File Structure
+
+```python ollie/memory.py
+# File paths for JSON storage
+MEMORIES_FILE = "memories.json"
+THEMES_FILE = "themes.json"
+FRIENDS_FILE = "friends.json"
+GOALS_FILE = "goals.json"
+```
+
+### Memory Schema
+
+```python ollie/memory.py
+def add_memory(kind: str, text: str, tags: List[str] | None = None, reward: float = 0.0):
+    """Add a new memory to storage"""
+    tags = tags or []
+    emb = embed_text(text)
+    
+    memory = {
+        "id": str(int(datetime.now().timestamp() * 1000)),  # Simple ID generation
+        "kind": kind,
+        "text": text,
+        "tags": tags,
+        "reward": reward,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "embedding": emb
+    }
+    
+    memories = _load_json_file(MEMORIES_FILE, [])
+    memories.append(memory)
+    _save_json_file(MEMORIES_FILE, memories)
+```
+
+## Core Functions
+
+### Memory Storage
+
+#### Adding Memories
+
+```python ollie/memory.py
+def add_memory(kind: str, text: str, tags: List[str] | None = None, reward: float = 0.0):
+    """Add a new memory to storage"""
+    tags = tags or []
+    emb = embed_text(text)
+    
+    memory = {
+        "id": str(int(datetime.now().timestamp() * 1000)),
+        "kind": kind,
+        "text": text,
+        "tags": tags,
+        "reward": reward,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "embedding": emb
+    }
+    
+    memories = _load_json_file(MEMORIES_FILE, [])
+    memories.append(memory)
+    _save_json_file(MEMORIES_FILE, memories)
+```
+
+**Usage Examples:**
+```python
+# Store a post
+add_memory("post", "i saw a rainbow today! 🌈", ["post", "child", "nature"], reward=0)
+
+# Store a lesson learned
+add_memory("lesson", "rainbow posts did awesome (reward=16.1). keep it short, sweet, a little silly.", ["lesson", "child", "core"], reward=16.1)
+
+# Store a mention
+add_memory("mention", "Your posts are so cute!", ["social", "mention"], reward=0)
+```
+
+#### Embedding Generation
+
+```python ollie/memory.py
+def embed_text(text: str) -> List[float]:
+    """Generate embeddings using OpenAI"""
+    resp = openai.embeddings.create(model="text-embedding-3-small", input=text)
+    return resp.data[0].embedding
+```
+
+**What it does:**
+- Uses OpenAI's `text-embedding-3-small` model
+- Generates 1536-dimensional vector embeddings
+- Enables semantic search and similarity matching
+
+### Memory Retrieval
+
+#### Semantic Search
+
+```python ollie/memory.py
+def recall_memories_decayed(query: str, k: int = 8, shortlist: int = 60) -> List[str]:
+    """Recall memories using vector similarity and recency"""
+    emb = embed_text(query)
+    memories = _load_json_file(MEMORIES_FILE, [])
+    
+    # Calculate similarity scores
+    scored_memories = []
+    now = datetime.now(timezone.utc)
+    
+    for memory in memories[-shortlist:]:  # Use recent memories for shortlist
+        try:
+            dist = _cosine_distance(emb, memory["embedding"])
+            hours = max(0.0, (now - datetime.fromisoformat(memory["created_at"])).total_seconds()/3600.0)
+            
+            sim = 1.0 / (1.0 + float(dist))
+            recency = math.exp(-hours / (24.0*7.0))  # 1 week decay
+            
+            manual_boost = 1.25 if memory["kind"] == "manual_post" else 1.0
+            core_boost = 1.35 if (memory["tags"] and "core" in memory["tags"]) else 1.0
+            
+            score = (0.6*sim + 0.4*recency) * manual_boost * core_boost
+            scored_memories.append((score, memory["text"]))
+        except Exception:
+            continue
+    
+    # Sort by score and return top k
+    scored_memories.sort(key=lambda x: x[0], reverse=True)
+    return [text for _, text in scored_memories[:k]]
+```
+
+**Usage Examples:**
+```python
+# Find memories about rainbows
+rainbow_memories = recall_memories_decayed("rainbow", k=5)
+# Returns: ["i saw a rainbow today! 🌈", "rainbow posts did awesome (reward=16.1)...", ...]
+
+# Find memories about friends
+friend_memories = recall_memories_decayed("friend", k=3)
+# Returns: ["Your posts are so cute!", "thank u for the nice words! 😊", ...]
+```
+
+#### Cosine Similarity
+
+```python ollie/memory.py
+def _cosine_distance(vec1: List[float], vec2: List[float]) -> float:
+    """Calculate cosine distance between two vectors"""
+    if len(vec1) != len(vec2):
+        return 1.0
+    
+    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+    norm1 = math.sqrt(sum(a * a for a in vec1))
+    norm2 = math.sqrt(sum(a * a for a in vec2))
+    
+    if norm1 == 0 or norm2 == 0:
+        return 1.0
+    
+    cosine_sim = dot_product / (norm1 * norm2)
+    return 1.0 - cosine_sim  # Convert to distance
+```
+
+## Theme Management
+
+### Theme Tracking
+
+```python ollie/memory.py
+def bump_theme(theme: str, amt: float = 1.0):
+    """Increase theme score"""
+    if not theme:
+        return
+    
+    themes = _load_json_file(THEMES_FILE, {})
+    if theme in themes:
+        themes[theme]["score"] += amt
+        themes[theme]["last_updated"] = datetime.now(timezone.utc).isoformat()
+    else:
+        themes[theme] = {
+            "score": amt,
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+    
+    _save_json_file(THEMES_FILE, themes)
+```
+
+**Usage Examples:**
+```python
+# Track popular themes
+bump_theme("rainbow", 1.0)  # Rainbow mentioned in a post
+bump_theme("puppy", 0.5)    # Puppy mentioned in a reply
+bump_theme("cloud", 2.0)    # Cloud mentioned multiple times
+```
+
+### Top Themes
+
+```python ollie/memory.py
+def top_themes(n: int = 8) -> List[Tuple[str, float]]:
+    """Get top themes by score"""
+    themes = _load_json_file(THEMES_FILE, {})
+    sorted_themes = sorted(themes.items(), key=lambda x: x[1]["score"], reverse=True)
+    return [(name, data["score"]) for name, data in sorted_themes[:n]]
+```
+
+**Usage Examples:**
+```python
+# Get most popular themes
+popular_themes = top_themes(5)
+# Returns: [("rainbow", 15.5), ("cloud", 12.0), ("puppy", 8.5), ...]
+
+# Use in AI prompts
+favs = ", ".join([n for n, _ in top_themes(4)])
+# "rainbow, cloud, puppy, nature"
+```
+
+### Theme Extraction
+
+```python ollie/memory.py
+def dominant_theme(text: str) -> str | None:
+    """Extract dominant theme from text"""
+    words = [w.lower() for w in re.findall(THEME_WORDS, text)]
+    words = [w for w in words if w not in STOP_WORDS]
+    
+    if not words:
+        return None
+    
+    freq = {}
+    for w in words:
+        freq[w] = freq.get(w, 0) + 1
+    
+    return sorted(freq.items(), key=lambda x: x[1], reverse=True)[0][0]
+```
+
+**Usage Examples:**
+```python
+# Extract theme from text
+theme = dominant_theme("i saw a rainbow today! it was so pretty")
+# Returns: "rainbow"
+
+theme = dominant_theme("the puppy was playing with a ball")
+# Returns: "puppy"
+```
+
+## Friend Management
+
+### Friend Tracking
+
+```python ollie/memory.py
+def bump_friend(user_id: str, handle: str | None):
+    """Track friend interactions"""
+    if not user_id:
+        return
+    
+    friends = _load_json_file(FRIENDS_FILE, {})
+    if user_id in friends:
+        friends[user_id]["interactions"] += 1
+        friends[user_id]["last_seen"] = datetime.now(timezone.utc).isoformat()
+        if handle:
+            friends[user_id]["handle"] = handle
+    else:
+        friends[user_id] = {
+            "handle": handle,
+            "interactions": 1,
+            "last_seen": datetime.now(timezone.utc).isoformat()
+        }
+    
+    _save_json_file(FRIENDS_FILE, friends)
+```
+
+**Usage Examples:**
+```python
+# Track friend interactions
+bump_friend("1234567890", "@friendly_user")  # New friend
+bump_friend("1234567890", None)              # Existing friend, just interaction
+```
+
+### Top Friends
+
+```python ollie/memory.py
+def top_friends(n: int = 10) -> List[Tuple[str, str, int]]:
+    """Get top friends by interaction count"""
+    friends = _load_json_file(FRIENDS_FILE, {})
+    sorted_friends = sorted(
+        friends.items(), 
+        key=lambda x: (x[1]["interactions"], x[1]["last_seen"]), 
+        reverse=True
+    )
+    return [
+        (user_id, data.get("handle", ""), data["interactions"]) 
+        for user_id, data in sorted_friends[:n]
+    ]
+```
+
+**Usage Examples:**
+```python
+# Get most active friends
+top_friends_list = top_friends(5)
+# Returns: [("1234567890", "@friendly_user", 15), ("9876543210", "@nice_person", 8), ...]
+
+# Use for personalized replies
+for user_id, handle, interactions in top_friends(20):
+    if user_id == mention_author_id:
+        friend_level = interactions
+        break
+```
+
+## File Management
+
+### JSON File Operations
+
+```python ollie/memory.py
+def _load_json_file(filename: str, default: Any = None) -> Any:
+    """Load data from JSON file with default fallback"""
+    if not os.path.exists(filename):
+        return default if default is not None else []
+    
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return default if default is not None else []
+
+def _save_json_file(filename: str, data: Any):
+    """Save data to JSON file"""
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+```
+
+### Schema Initialization
+
+```python ollie/memory.py
+def ensure_schema():
+    """Initialize JSON files if they don't exist"""
+    # Create files with empty data structures if they don't exist
+    if not os.path.exists(MEMORIES_FILE):
+        _save_json_file(MEMORIES_FILE, [])
+    if not os.path.exists(THEMES_FILE):
+        _save_json_file(THEMES_FILE, {})
+    if not os.path.exists(FRIENDS_FILE):
+        _save_json_file(FRIENDS_FILE, {})
+    if not os.path.exists(GOALS_FILE):
+        _save_json_file(GOALS_FILE, [])
+```
+
+## Example Data Structures
+
+### Memories File
+
+```json memories.json
+[
+  {
+    "id": "1756847776915",
+    "kind": "post",
+    "text": "i love rainbows and puppies",
+    "tags": ["post", "child", "happy"],
+    "reward": 5.0,
+    "created_at": "2025-09-02T21:16:16.915727+00:00",
+    "embedding": [0.015, -0.062, 0.001, ...]
+  },
+  {
+    "id": "1756847776916",
+    "kind": "lesson",
+    "text": "rainbow posts did awesome (reward=16.1). keep it short, sweet, a little silly.",
+    "tags": ["lesson", "child", "core"],
+    "reward": 16.1,
+    "created_at": "2025-09-02T21:20:00.000000+00:00",
+    "embedding": [0.023, -0.045, 0.012, ...]
+  }
+]
+```
+
+### Themes File
+
+```json themes.json
+{
+  "rainbow": {
+    "score": 15.5,
+    "last_updated": "2025-09-02T21:18:54.343462+00:00"
+  },
+  "cloud": {
+    "score": 12.0,
+    "last_updated": "2025-09-02T21:20:09.813875+00:00"
+  },
+  "puppy": {
+    "score": 8.5,
+    "last_updated": "2025-09-02T21:21:01.243063+00:00"
+  }
+}
+```
+
+### Friends File
+
+```json friends.json
+{
+  "1234567890": {
+    "handle": "@friendly_user",
+    "interactions": 15,
+    "last_seen": "2025-09-02T21:18:54.343462+00:00"
+  },
+  "9876543210": {
+    "handle": "@nice_person",
+    "interactions": 8,
+    "last_seen": "2025-09-02T21:20:09.813875+00:00"
+  }
+}
+```
+
+## Integration Examples
+
+### CLI Integration
+
+```python
+# cli.py uses memory for content generation
+def ask_for_tweet(claude: Claude, state: AgentState, mode: str = "observation") -> str:
+    lessons = format_lessons(hint or mode)  # Uses recall_memories_decayed
+    phrases = sample_phrases()              # Uses recall_memories_decayed
+    favs = ", ".join([n for n, _ in top_themes(4)])
+    
+    user = f"recent lessons:\n- {lessons}\n\nfavorites/themes (top): {favs or 'none yet'}"
+    return claude.generate(sys, user, max_tokens=160).strip()
+```
+
+### Growth Engine Integration
+
+```python
+# growth.py uses memory for learning
+def craft_lesson(text: str, reward: float) -> str:
+    lesson = f"rainbow posts did awesome (reward={reward:.1f}). keep it short, sweet, a little silly."
+    add_memory("lesson", lesson, ["lesson", "child", "core"], reward)
+```
+
+### AI Integration
+
+```python
+# ai.py uses memory for context
+def format_lessons(hint: str) -> str:
+    recents = recall_memories_decayed(hint or "tweet", k=8)
+    if not recents:
+        recents = ["use lowercase; simple words", "ask tiny questions sometimes"]
+    return "\n- ".join(recents)
+```
+
+## Performance Considerations
+
+### Memory Optimization
+
+```python
+# Use shortlist for recent memories only
+def recall_memories_decayed(query: str, k: int = 8, shortlist: int = 60):
+    for memory in memories[-shortlist:]:  # Only check recent memories
+        # ... similarity calculation
+```
+
+### Batch Operations
+
+```python
+# Batch memory operations for efficiency
+def batch_add_memories(memory_list: List[dict]):
+    memories = _load_json_file(MEMORIES_FILE, [])
+    memories.extend(memory_list)
+    _save_json_file(MEMORIES_FILE, memories)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="AI Integration" icon="robot" href="/files/ai">
+  See how memories provide context for AI generation.
+</Card>
+
+<Card title="Growth Engine" icon="seedling" href="/files/growth">
+  Learn how memories drive learning and personality evolution.
+</Card>
+
+<Card title="CLI Interface" icon="terminal" href="/files/cli">
+  Understand how memory is used in the command-line interface.
+</Card>
+
+<Card title="Usage Guide" icon="play" href="/usage/commands">
+  Learn how to use memory features in practice.
+</Card>
+</CardGroup>
+

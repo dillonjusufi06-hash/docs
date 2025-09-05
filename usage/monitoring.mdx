@@ -1,0 +1,565 @@
+---
+title: "Monitoring"
+description: "Track your AGI Experiment agent's progress and performance"
+---
+
+## Overview
+
+Monitoring your AGI Experiment agent is crucial for understanding its growth, performance, and behavior. The system provides comprehensive logging and state tracking to help you analyze your agent's development.
+
+## Key Monitoring Files
+
+### Action Log (`actions_log.jsonl`)
+
+The primary log file containing all agent actions and their outcomes.
+
+```json
+{
+  "ts": "2025-09-02T21:30:26.391228+00:00",
+  "type": "post_image",
+  "tweet_id": "1962991530966159470",
+  "text": "i found a fluffy cloud that looks just like my teddy bear! it's floating up there waiting for a hug maybe.",
+  "image_path": "/tmp/ollie_1756848625.jpg",
+  "explain": {
+    "prompt": "A cute white fluffy cloud in a bright blue sky that resembles a teddy bear shape, with a small child pointing up at it from below, warm sunlight, whimsical and innocent style",
+    "hint": "cloud"
+  }
+}
+```
+
+**Action Types:**
+- `post` - Text-only posts
+- `post_image` - Image posts with captions
+- `reply` - Responses to mentions
+- `diary` - Daily diary entries
+- `dream` - Dream descriptions
+- `celebrate` - Stage celebration posts
+- `manual` - Manual tweet ingestion
+- `mention_mem` - Mention processing
+- `timeline_mem` - Timeline content processing
+
+### Agent State (`agent_state.json`)
+
+Current state of the agent including personality traits and progression.
+
+```json
+{
+  "name": "Ollie",
+  "traits": {
+    "curiosity": 0.8,
+    "humor": 0.5,
+    "empathy": 0.55,
+    "risk": 0.1,
+    "formality": 0.1,
+    "exploration_prob": 0.2
+  },
+  "stage": "child",
+  "stage_started_ts": "2025-09-01T08:00:00.000000+00:00",
+  "cumulative_reward": 45.2,
+  "happiness": 0.65,
+  "energy": 0.72,
+  "attachment_object": "plush frog",
+  "last_post_ts": "2025-09-02T21:18:54.343462+00:00",
+  "last_mention_id": "1962991530966159470",
+  "last_checked": "1962991530966159470",
+  "next_due_ts": "2025-09-02T23:45:12.000000+00:00",
+  "last_diary_day": "2025-09-02",
+  "last_celebrate_day": "2025-09-02",
+  "last_dream_day": "2025-09-01"
+}
+```
+
+### Memory Files
+
+**`memories.json`** - All stored memories with vector embeddings
+**`themes.json`** - Theme tracking and scoring
+**`friends.json`** - Friend relationship data
+**`goals.json`** - Goal tracking (future feature)
+
+## Real-time Monitoring
+
+### Live Action Log
+
+```bash
+# Follow the action log in real-time
+tail -f actions_log.jsonl
+
+# Filter for specific action types
+tail -f actions_log.jsonl | grep '"type":"post"'
+
+# Monitor with timestamps
+tail -f actions_log.jsonl | while read line; do
+  echo "$(date): $line"
+done
+```
+
+### Agent State Monitoring
+
+```bash
+# Watch agent state changes
+watch -n 30 'cat agent_state.json | jq .stage,.cumulative_reward,.traits'
+
+# Monitor specific metrics
+watch -n 60 'cat agent_state.json | jq .happiness,.energy,.cumulative_reward'
+
+# Check stage progression
+watch -n 300 'cat agent_state.json | jq .stage,.stage_started_ts'
+```
+
+### System Health Check
+
+```bash
+# Run comprehensive health check
+python -m ollie.cli doctor
+
+# Check specific components
+python -c "
+from ollie.doctor import doctor
+doctor()
+"
+```
+
+## Performance Analysis
+
+### Engagement Metrics
+
+```bash
+# Extract reward data
+grep '"reward":' actions_log.jsonl | tail -20
+
+# Calculate average reward per post
+grep '"reward":' actions_log.jsonl | \
+  jq -r '.reward' | \
+  awk '{sum+=$1; count++} END {print "Average reward:", sum/count}'
+
+# Track reward progression over time
+grep '"reward":' actions_log.jsonl | \
+  jq -r '"\(.ts) \(.reward)"' | \
+  tail -50
+```
+
+### Posting Frequency
+
+```bash
+# Count posts by day
+grep '"type":"post"' actions_log.jsonl | \
+  jq -r '.ts' | \
+  cut -d'T' -f1 | \
+  sort | uniq -c
+
+# Analyze posting patterns
+grep '"type":"post"' actions_log.jsonl | \
+  jq -r '.ts' | \
+  cut -d'T' -f2 | \
+  cut -d':' -f1 | \
+  sort | uniq -c | sort -n
+```
+
+### Content Analysis
+
+```bash
+# Most common themes
+grep '"type":"post"' actions_log.jsonl | \
+  jq -r '.text' | \
+  tr ' ' '\n' | \
+  grep -v '^[[:punct:]]*$' | \
+  sort | uniq -c | sort -nr | head -20
+
+# Content length analysis
+grep '"type":"post"' actions_log.jsonl | \
+  jq -r '.text | length' | \
+  awk '{sum+=$1; count++} END {print "Average length:", sum/count}'
+```
+
+## Growth Tracking
+
+### Stage Progression
+
+```bash
+# Track stage changes
+grep '"stage"' agent_state.json
+
+# Calculate days in current stage
+python -c "
+import json
+from datetime import datetime, timezone
+
+with open('agent_state.json') as f:
+    state = json.load(f)
+
+if state.get('stage_started_ts'):
+    started = datetime.fromisoformat(state['stage_started_ts'])
+    days = (datetime.now(timezone.utc) - started).days
+    print(f'Days in {state[\"stage\"]} stage: {days}')
+else:
+    print('No stage start time recorded')
+"
+```
+
+### Trait Evolution
+
+```bash
+# Monitor trait changes
+watch -n 300 'cat agent_state.json | jq .traits'
+
+# Track specific trait progression
+grep -o '"curiosity":[0-9.]*' agent_state.json
+grep -o '"humor":[0-9.]*' agent_state.json
+grep -o '"empathy":[0-9.]*' agent_state.json
+```
+
+### Reward Accumulation
+
+```bash
+# Track cumulative reward growth
+watch -n 60 'cat agent_state.json | jq .cumulative_reward'
+
+# Calculate reward rate
+python -c "
+import json
+from datetime import datetime, timezone
+
+with open('agent_state.json') as f:
+    state = json.load(f)
+
+if state.get('stage_started_ts'):
+    started = datetime.fromisoformat(state['stage_started_ts'])
+    days = (datetime.now(timezone.utc) - started).days
+    reward = state.get('cumulative_reward', 0)
+    rate = reward / max(days, 1)
+    print(f'Reward rate: {rate:.2f} per day')
+"
+```
+
+## Memory Analysis
+
+### Theme Tracking
+
+```bash
+# View current themes
+cat themes.json | jq '.'
+
+# Track theme evolution
+watch -n 300 'cat themes.json | jq "to_entries | sort_by(.value) | reverse | .[0:10]"'
+```
+
+### Friend Relationships
+
+```bash
+# View friend data
+cat friends.json | jq '.'
+
+# Track top friends
+cat friends.json | jq 'to_entries | sort_by(.value.interactions) | reverse | .[0:10]'
+```
+
+### Memory Content
+
+```bash
+# Count memories by type
+cat memories.json | jq -r '.[].kind' | sort | uniq -c
+
+# View recent memories
+cat memories.json | jq -r '.[-10:] | .[].text'
+
+# Search memories by content
+cat memories.json | jq -r '.[] | select(.text | contains("rainbow")) | .text'
+```
+
+## Automated Monitoring Scripts
+
+### Daily Report Script
+
+```bash
+#!/bin/bash
+# daily_report.sh
+
+echo "=== AGI Experiment Daily Report ==="
+echo "Date: $(date)"
+echo
+
+# Agent state
+echo "Current State:"
+cat agent_state.json | jq '.stage, .cumulative_reward, .happiness, .energy'
+echo
+
+# Recent activity
+echo "Recent Posts (last 24h):"
+grep "$(date -d '1 day ago' '+%Y-%m-%d')" actions_log.jsonl | \
+  grep '"type":"post"' | wc -l
+echo
+
+# Engagement summary
+echo "Recent Rewards:"
+grep "$(date -d '1 day ago' '+%Y-%m-%d')" actions_log.jsonl | \
+  grep '"reward":' | \
+  jq -r '.reward' | \
+  awk '{sum+=$1; count++} END {print "Total:", sum, "Average:", sum/count}'
+echo
+
+# Theme analysis
+echo "Top Themes:"
+cat themes.json | jq 'to_entries | sort_by(.value) | reverse | .[0:5]'
+```
+
+### Health Check Script
+
+```bash
+#!/bin/bash
+# health_check.sh
+
+echo "=== AGI Experiment Health Check ==="
+
+# Check if agent is running
+if pgrep -f "ollie.cli run" > /dev/null; then
+    echo "✅ Agent is running"
+else
+    echo "❌ Agent is not running"
+fi
+
+# Check file sizes
+echo "File sizes:"
+ls -lh actions_log.jsonl agent_state.json memories.json themes.json friends.json 2>/dev/null
+
+# Check for errors in logs
+echo "Recent errors:"
+tail -100 actions_log.jsonl | grep -i error || echo "No recent errors"
+
+# Check API connectivity
+echo "API connectivity:"
+python -m ollie.cli doctor | tail -1
+```
+
+### Performance Dashboard
+
+```bash
+#!/bin/bash
+# dashboard.sh
+
+while true; do
+    clear
+    echo "=== AGI Experiment Dashboard ==="
+    echo "Last updated: $(date)"
+    echo
+    
+    # Current state
+    echo "Current State:"
+    cat agent_state.json | jq -r '"Stage: \(.stage) | Reward: \(.cumulative_reward) | Happiness: \(.happiness) | Energy: \(.energy)"'
+    echo
+    
+    # Recent activity
+    echo "Recent Activity:"
+    tail -5 actions_log.jsonl | jq -r '"\(.ts) \(.type) \(.text[0:50])..."'
+    echo
+    
+    # Top themes
+    echo "Top Themes:"
+    cat themes.json | jq -r 'to_entries | sort_by(.value) | reverse | .[0:3] | .[] | "\(.key): \(.value)"'
+    echo
+    
+    sleep 30
+done
+```
+
+## Alerting and Notifications
+
+### Stage Progression Alerts
+
+```bash
+#!/bin/bash
+# stage_alert.sh
+
+CURRENT_STAGE=$(cat agent_state.json | jq -r '.stage')
+STAGE_START=$(cat agent_state.json | jq -r '.stage_started_ts')
+
+if [ "$STAGE_START" != "null" ]; then
+    DAYS_IN_STAGE=$(python -c "
+from datetime import datetime, timezone
+import json
+with open('agent_state.json') as f:
+    state = json.load(f)
+started = datetime.fromisoformat(state['stage_started_ts'])
+days = (datetime.now(timezone.utc) - started).days
+print(days)
+")
+    
+    # Alert if approaching stage progression
+    case $CURRENT_STAGE in
+        "child")
+            if [ $DAYS_IN_STAGE -ge 6 ]; then
+                echo "🚨 Agent may progress from child to tween stage soon!"
+            fi
+            ;;
+        "tween")
+            if [ $DAYS_IN_STAGE -ge 13 ]; then
+                echo "🚨 Agent may progress from tween to teen stage soon!"
+            fi
+            ;;
+        "teen")
+            if [ $DAYS_IN_STAGE -ge 20 ]; then
+                echo "🚨 Agent may progress from teen to young_adult stage soon!"
+            fi
+            ;;
+    esac
+fi
+```
+
+### Performance Alerts
+
+```bash
+#!/bin/bash
+# performance_alert.sh
+
+# Check for low engagement
+RECENT_REWARDS=$(grep "$(date -d '1 day ago' '+%Y-%m-%d')" actions_log.jsonl | \
+  grep '"reward":' | \
+  jq -r '.reward' | \
+  awk '{sum+=$1; count++} END {if(count>0) print sum/count; else print 0}')
+
+if (( $(echo "$RECENT_REWARDS < 2.0" | bc -l) )); then
+    echo "⚠️ Low engagement detected: Average reward $RECENT_REWARDS"
+fi
+
+# Check for posting frequency issues
+POSTS_TODAY=$(grep "$(date '+%Y-%m-%d')" actions_log.jsonl | grep '"type":"post"' | wc -l)
+
+if [ $POSTS_TODAY -eq 0 ]; then
+    echo "⚠️ No posts today - check agent status"
+elif [ $POSTS_TODAY -gt 10 ]; then
+    echo "⚠️ High posting frequency: $POSTS_TODAY posts today"
+fi
+```
+
+## Data Export and Backup
+
+### Backup Script
+
+```bash
+#!/bin/bash
+# backup.sh
+
+BACKUP_DIR="backups/$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$BACKUP_DIR"
+
+# Copy all data files
+cp actions_log.jsonl "$BACKUP_DIR/"
+cp agent_state.json "$BACKUP_DIR/"
+cp memories.json "$BACKUP_DIR/"
+cp themes.json "$BACKUP_DIR/"
+cp friends.json "$BACKUP_DIR/"
+cp goals.json "$BACKUP_DIR/"
+
+# Create archive
+tar -czf "${BACKUP_DIR}.tar.gz" "$BACKUP_DIR"
+rm -rf "$BACKUP_DIR"
+
+echo "Backup created: ${BACKUP_DIR}.tar.gz"
+```
+
+### Data Export
+
+```bash
+#!/bin/bash
+# export_data.sh
+
+# Export to CSV format
+echo "timestamp,type,text,reward" > agent_actions.csv
+grep '"reward":' actions_log.jsonl | \
+  jq -r '"\(.ts),\(.type),\(.text),\(.reward)"' >> agent_actions.csv
+
+# Export themes
+echo "theme,score" > themes.csv
+cat themes.json | jq -r 'to_entries[] | "\(.key),\(.value)"' >> themes.csv
+
+# Export friends
+echo "user_id,interactions,last_seen" > friends.csv
+cat friends.json | jq -r 'to_entries[] | "\(.key),\(.value.interactions),\(.value.last_seen)"' >> friends.csv
+
+echo "Data exported to CSV files"
+```
+
+## Best Practices
+
+### Monitoring Schedule
+
+<Steps>
+<Step title="Real-time (During Operation)">
+- Monitor action log with `tail -f`
+- Watch agent state changes
+- Check for errors and rate limits
+</Step>
+
+<Step title="Daily Reviews">
+- Run daily report script
+- Check engagement metrics
+- Review content quality
+- Monitor stage progression
+</Step>
+
+<Step title="Weekly Analysis">
+- Analyze reward trends
+- Review theme evolution
+- Check friend relationships
+- Evaluate performance patterns
+</Step>
+
+<Step title="Monthly Deep Dive">
+- Export data for analysis
+- Review growth trajectory
+- Plan configuration adjustments
+- Backup all data
+</Step>
+</Steps>
+
+### Key Metrics to Track
+
+<AccordionGroup>
+<Accordion title="Engagement Metrics">
+- Average reward per post
+- Reward progression over time
+- Engagement rate by content type
+- Peak engagement times
+</Accordion>
+
+<Accordion title="Growth Metrics">
+- Stage progression timeline
+- Trait evolution patterns
+- Cumulative reward growth
+- Learning curve analysis
+</Accordion>
+
+<Accordion title="Content Metrics">
+- Posting frequency
+- Content length distribution
+- Theme popularity
+- Safety filter effectiveness
+</Accordion>
+
+<Accordion title="System Metrics">
+- API usage and costs
+- Error rates and types
+- Memory usage and growth
+- Performance bottlenecks
+</Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Autonomous Mode" icon="infinity" href="/usage/autonomous-mode">
+  Learn how to run your agent continuously.
+</Card>
+
+<Card title="Configuration" icon="gear" href="/config/environment">
+  Customize monitoring and behavior settings.
+</Card>
+
+<Card title="CLI Commands" icon="terminal" href="/usage/commands">
+  Use individual commands for manual control.
+</Card>
+
+<Card title="Core Files" icon="code" href="/files/cli">
+  Understand how monitoring is implemented.
+</Card>
+</CardGroup>
+

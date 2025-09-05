@@ -1,0 +1,357 @@
+---
+title: "client.py"
+description: "X/Twitter API client"
+---
+
+## Overview
+
+The `client.py` file provides a comprehensive interface to the Twitter/X API using the Tweepy library. It handles posting content, fetching engagement metrics, managing mentions, and processing timeline data.
+
+## Core Class
+
+### XClient Class
+
+```python ollie/client.py
+class XClient:
+    def __init__(self):
+        required = [
+            "X_BEARER_TOKEN", "X_CONSUMER_KEY", "X_CONSUMER_SECRET",
+            "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET", "X_ACCOUNT_USER_ID"
+        ]
+        missing = [k for k in required if not os.environ.get(k)]
+        if missing:
+            raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
+        
+        ck = os.environ["X_CONSUMER_KEY"]
+        cs = os.environ["X_CONSUMER_SECRET"]
+        at = os.environ["X_ACCESS_TOKEN"]
+        ats = os.environ["X_ACCESS_TOKEN_SECRET"]
+        self.user_id = os.environ["X_ACCOUNT_USER_ID"]
+        
+        self.client = tweepy.Client(
+            bearer_token=os.environ["X_BEARER_TOKEN"],
+            consumer_key=ck, consumer_secret=cs,
+            access_token=at, access_token_secret=ats,
+            wait_on_rate_limit=True)
+
+        auth = tweepy.OAuth1UserHandler(ck, cs, at, ats)
+        self.api_v1 = tweepy.API(auth, wait_on_rate_limit=True)
+```
+
+**What it does:**
+- Validates all required environment variables are present
+- Initializes both v2 and v1.1 API clients
+- Sets up rate limiting handling
+- Stores user ID for API calls
+
+## Core Methods
+
+### Posting Content
+
+#### Basic Text Post
+
+```python ollie/client.py
+def post(self, text: str, in_reply_to_tweet_id: Optional[str] = None) -> str:
+    if in_reply_to_tweet_id:
+        r = self.client.create_tweet(text=text, in_reply_to_tweet_id=in_reply_to_tweet_id)
+    else:
+        r = self.client.create_tweet(text=text)
+    return str(r.data.get("id"))
+```
+
+**Usage:**
+```python
+xc = XClient()
+
+# Post a new tweet
+tweet_id = xc.post("i saw a rainbow today! 🌈")
+print(f"Posted tweet: {tweet_id}")
+
+# Reply to a tweet
+reply_id = xc.post("thank u! 😊", in_reply_to_tweet_id="1234567890")
+print(f"Posted reply: {reply_id}")
+```
+
+#### Post with Media
+
+```python ollie/client.py
+def post_with_media(self, text: str, img: str) -> str:
+    mid = self.api_v1.media_upload(filename=img).media_id_string
+    r = self.client.create_tweet(text=text, media_ids=[mid])
+    return str(r.data.get("id"))
+```
+
+**Usage:**
+```python
+xc = XClient()
+
+# Post image with caption
+tweet_id = xc.post_with_media("look what i made! 🎨", "/path/to/image.jpg")
+print(f"Posted image tweet: {tweet_id}")
+```
+
+### Fetching Data
+
+#### User Tweets
+
+```python ollie/client.py
+def fetch_user_tweets(self, since_id: Optional[str] = None, limit: int = 50) -> List:
+    tweets = self.client.get_users_tweets(
+        id=self.user_id, since_id=since_id, max_results=min(100, limit),
+        tweet_fields=["created_at", "public_metrics", "author_id"])
+    return tweets.data if tweets and tweets.data else []
+```
+
+**Usage:**
+```python
+xc = XClient()
+
+# Get recent tweets
+recent_tweets = xc.fetch_user_tweets(limit=20)
+for tweet in recent_tweets:
+    print(f"Tweet {tweet.id}: {tweet.text}")
+
+# Get tweets since a specific ID
+new_tweets = xc.fetch_user_tweets(since_id="1234567890", limit=10)
+```
+
+#### Engagement Metrics
+
+```python ollie/client.py
+def fetch_metrics(self, tweet_id: str) -> Dict[str, int]:
+    try:
+        r = self.client.get_tweet(id=tweet_id, tweet_fields=["public_metrics"])
+        pm = (getattr(r, "data", None) or {}).get("public_metrics", {})
+        return {
+            "likes": int(pm.get("like_count", 0)),
+            "replies": int(pm.get("reply_count", 0)),
+            "retweets": int(pm.get("retweet_count", 0)),
+            "quotes": int(pm.get("quote_count", 0)),
+            "bookmarks": int(pm.get("bookmark_count", 0)) if "bookmark_count" in pm else 0
+        }
+    except Exception:
+        return {"likes": 0, "replies": 0, "retweets": 0, "quotes": 0, "bookmarks": 0}
+```
+
+**Usage:**
+```python
+xc = XClient()
+
+# Get engagement metrics
+metrics = xc.fetch_metrics("1962988628663034105")
+print(f"Likes: {metrics['likes']}")
+print(f"Replies: {metrics['replies']}")
+print(f"Retweets: {metrics['retweets']}")
+print(f"Bookmarks: {metrics['bookmarks']}")
+```
+
+#### Mentions
+
+```python ollie/client.py
+def fetch_mentions(self, since_id: Optional[str] = None, limit: int = 30) -> List:
+    kwargs = {
+        "id": self.user_id, "max_results": min(50, max(10, limit)),
+        "tweet_fields": ["created_at", "public_metrics", "author_id"]
+    }
+    if since_id:
+        kwargs["since_id"] = since_id
+    
+    r = self.client.get_users_mentions(**kwargs)
+    return r.data if r and r.data else []
+```
+
+**Usage:**
+```python
+xc = XClient()
+
+# Get recent mentions
+mentions = xc.fetch_mentions(limit=20)
+for mention in mentions:
+    print(f"Mention from {mention.author_id}: {mention.text}")
+
+# Get new mentions since last check
+new_mentions = xc.fetch_mentions(since_id=state.last_mention_id, limit=10)
+```
+
+#### Following Timeline
+
+```python ollie/client.py
+def fetch_following_timeline(self, limit_users: int = 10, tweets_per_user: int = 1) -> List:
+    out = []
+    try:
+        fl = self.client.get_users_following(id=self.user_id, max_results=min(100, max(5, limit_users)))
+        if not fl or not fl.data:
+            return out
+        
+        for u in fl.data[:limit_users]:
+            tl = self.client.get_users_tweets(
+                id=u.id, max_results=min(5, max(1, tweets_per_user)),
+                exclude=["retweets"],
+                tweet_fields=["created_at", "public_metrics", "author_id"])
+            if tl and tl.data:
+                out.extend(tl.data)
+    except Exception:
+        pass
+    return out
+```
+
+**Usage:**
+```python
+xc = XClient()
+
+# Get timeline from following users
+timeline = xc.fetch_following_timeline(limit_users=5, tweets_per_user=2)
+for tweet in timeline:
+    print(f"Timeline tweet: {tweet.text}")
+```
+
+## Integration Examples
+
+### CLI Integration
+
+```python
+# cli.py uses XClient for posting
+def _post_text(xc: XClient, text: str, kind: str, state: AgentState, explain: dict = None):
+    if not looks_safe(text):
+        return None
+    
+    tid = xc.post(text)
+    action = {"ts": _now_iso(), "type": kind, "tweet_id": tid, "text": text}
+    if FF_EXPLAIN and explain:
+        action["explain"] = explain
+    
+    log_action(action)
+    add_memory(kind, text, [kind, state.stage], reward=0)
+    state.last_post_ts = _now_iso()
+    state.save()
+    
+    print(f"POSTED: {tid} → {text}")
+    return tid
+```
+
+### Growth Engine Integration
+
+```python
+# growth.py uses XClient for metrics
+def compute_reward_log_and_update(xc: XClient, state: AgentState):
+    for action in to_process:
+        tid = str(action.get("tweet_id"))
+        metrics = xc.fetch_metrics(tid)
+        reward = compute_reward(metrics)
+        
+        state.cumulative_reward += reward
+        # ... update state and traits
+```
+
+### Memory System Integration
+
+```python
+# memory.py uses XClient for data ingestion
+def ingest_mentions_to_memory(xc: XClient, state: AgentState, max_items: int = 30):
+    mentions = xc.fetch_mentions(since_id=state.last_mention_id or None, limit=max_items)
+    for mention in mentions:
+        add_memory("mention", mention.text, ["social", "mention"], reward=0)
+        bump_friend(str(mention.author_id), None)
+```
+
+## Error Handling
+
+### Rate Limiting
+
+```python
+# Built-in rate limiting handling
+self.client = tweepy.Client(
+    bearer_token=os.environ["X_BEARER_TOKEN"],
+    consumer_key=ck, consumer_secret=cs,
+    access_token=at, access_token_secret=ats,
+    wait_on_rate_limit=True)  # Automatically handles rate limits
+```
+
+### Exception Handling
+
+```python
+# Graceful error handling in CLI
+try:
+    tid = xc.post(text)
+except tweepy.TooManyRequests as e:
+    print("Rate limited; sleeping 15 minutes…", e)
+    time.sleep(15*60)
+except Exception as e:
+    print("Posting error:", e)
+    return None
+```
+
+## Configuration
+
+### Required Environment Variables
+
+```bash
+# All required for XClient initialization
+X_BEARER_TOKEN=your_bearer_token
+X_CONSUMER_KEY=your_consumer_key
+X_CONSUMER_SECRET=your_consumer_secret
+X_ACCESS_TOKEN=your_access_token
+X_ACCESS_TOKEN_SECRET=your_access_token_secret
+X_ACCOUNT_USER_ID=your_account_id
+```
+
+### API Limits
+
+```python
+# Default limits to respect API quotas
+MAX_TWEETS_PER_REQUEST = 100
+MAX_MENTIONS_PER_REQUEST = 50
+MAX_FOLLOWING_PER_REQUEST = 100
+MAX_TIMELINE_TWEETS_PER_USER = 5
+```
+
+## Best Practices
+
+### Efficient Data Fetching
+
+```python
+# Use since_id to avoid duplicate processing
+def ingest_new_data(xc: XClient, state: AgentState):
+    # Only fetch new mentions
+    mentions = xc.fetch_mentions(since_id=state.last_mention_id, limit=30)
+    
+    # Only fetch new tweets
+    tweets = xc.fetch_user_tweets(since_id=state.last_checked, limit=50)
+    
+    # Process and update state
+    state.last_mention_id = mentions[0].id if mentions else state.last_mention_id
+    state.last_checked = tweets[0].id if tweets else state.last_checked
+```
+
+### Batch Processing
+
+```python
+# Process multiple tweets efficiently
+def batch_fetch_metrics(xc: XClient, tweet_ids: List[str]) -> Dict[str, Dict[str, int]]:
+    metrics = {}
+    for tid in tweet_ids:
+        metrics[tid] = xc.fetch_metrics(tid)
+        time.sleep(0.1)  # Small delay to avoid rate limits
+    return metrics
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="CLI Interface" icon="terminal" href="/files/cli">
+  See how XClient is used in the command-line interface.
+</Card>
+
+<Card title="Growth Engine" icon="seedling" href="/files/growth">
+  Learn how engagement metrics drive personality evolution.
+</Card>
+
+<Card title="Memory System" icon="brain" href="/files/memory">
+  Understand how social data is processed into memories.
+</Card>
+
+<Card title="Usage Guide" icon="play" href="/usage/commands">
+  Learn how to use social media features in practice.
+</Card>
+</CardGroup>
+

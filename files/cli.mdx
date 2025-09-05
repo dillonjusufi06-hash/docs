@@ -1,0 +1,602 @@
+---
+title: "cli.py"
+description: "Main CLI interface for AGI Experiment"
+---
+
+## Overview
+
+The `cli.py` file provides the main command-line interface for the AGI Experiment agent. It handles all CLI commands, autonomous operation, content generation, and system management. This is the primary interface users interact with to control their AI agent.
+
+## Core Structure
+
+### Main Entry Point
+
+```python ollie/cli.py
+def main():
+    """Main CLI entry point"""
+    from .memory import ensure_schema
+    
+    ensure_schema()
+    state = AgentState.load()
+    xc = XClient()
+    claude = Claude()
+    o5 = O5()
+
+    parser = argparse.ArgumentParser(description="AGI Experiment – Growth Edition (V7.0)")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    # Add command parsers
+    p = sub.add_parser("post")
+    p.add_argument("--use_o5", action="store_true")
+    sub.add_parser("reply")
+    sub.add_parser("diary")
+    sub.add_parser("celebrate")
+    sub.add_parser("dream")
+    ia = sub.add_parser("post_image")
+    ia.add_argument("--source", choices=["auto", "local"], default="auto")
+    sub.add_parser("ingest")
+    runp = sub.add_parser("run")
+    runp.add_argument("--use_o5", action="store_true")
+    sub.add_parser("doctor")
+
+    args = parser.parse_args()
+    
+    # Route to appropriate command handler
+    if args.cmd == "doctor":
+        from .doctor import doctor
+        doctor()
+        return
+    
+    if args.cmd == "post":
+        do_text_post(xc, claude, state, o5=o5 if args.use_o5 else None)
+        return
+    
+    # ... more command routing
+```
+
+## Core Commands
+
+### Post Command
+
+```python ollie/cli.py
+def do_text_post(xc: XClient, claude: Claude, state: AgentState, o5: O5 = None):
+    """Generate and post a text tweet"""
+    modes = ["observation", "question", "reflection"]
+    w_obs = 0.45 + 0.15*state.energy
+    w_q = 0.30 + 0.20*state.traits.curiosity
+    w_ref = 0.25 + 0.20*(1.0 - abs(state.happiness-0.6))
+    ws = [w_obs, w_q, w_ref]
+    s = sum(ws)
+    ws = [w/s for w in ws]
+    
+    r = random.random()
+    mode = modes[0] if r < ws[0] else modes[1] if r < ws[0]+ws[1] else modes[2]
+    
+    txt = ask_for_tweet(claude, state, mode=mode, o5=o5)
+    _post_text(xc, txt, "post", state)
+```
+
+**What it does:**
+- Selects posting mode based on agent traits and mood
+- Generates content using AI with stage-specific prompts
+- Posts content with safety filtering
+- Logs action and updates agent state
+
+### Reply Command
+
+```python ollie/cli.py
+def do_reply_context(xc: XClient, claude: Claude, state: AgentState):
+    """Reply to mentions with context awareness"""
+    mentions = xc.fetch_mentions(since_id=state.last_mention_id or None, limit=10)
+    if not mentions:
+        return
+    
+    m = mentions[0]
+    uid = str(getattr(m, 'author_id', ''))
+    friend_level = 0
+    
+    if uid:
+        bump_friend(uid, None)
+        if FF_FRIEND_BONDING:
+            for f_uid, _handle, inter in top_friends(20):
+                if f_uid == uid:
+                    friend_level = inter
+                    break
+    
+    reply = ask_for_reply(claude, state, (m.text or ""), friend_level)
+    if not looks_safe(reply):
+        return
+    
+    tid = xc.post(reply, in_reply_to_tweet_id=str(m.id))
+    log_action({"ts": _now_iso(), "type": "reply", "tweet_id": tid, "text": reply, "in_reply_to": str(m.id)})
+    add_memory("reply", reply, ["reply", state.stage], reward=0)
+    state.last_post_ts = _now_iso()
+    state.last_mention_id = str(m.id)
+    state.save()
+    
+    print(f"REPLIED: {tid} → {reply}")
+```
+
+**What it does:**
+- Fetches recent mentions
+- Analyzes friend relationship strength
+- Generates contextually appropriate replies
+- Posts replies with proper threading
+- Updates friend interaction tracking
+
+### Run Command (Autonomous Mode)
+
+```python ollie/cli.py
+if args.cmd == "run":
+    if not state.stage_started_ts:
+        state.stage_started_ts = _now_iso()
+        state.save()
+    if not state.next_due_ts:
+        schedule_next_action(state, MEAN_GAP_MIN, MIN_GAP_MIN)
+    
+    TICK = 300
+    print(f"Autonomous mode… min_gap={MIN_GAP_MIN}m, mean_gap={MEAN_GAP_MIN}m, cap={DAILY_CAP}/day; stage={state.stage}")
+    tick = 0
+    
+    while True:
+        try:
+            if random.random() < 0.35:
+                ingest_manual_tweets(xc, state)
+            if random.random() < 0.40:
+                ingest_mentions_to_memory(xc, state)
+            if random.random() < 0.25:
+                ingest_timeline_to_memory(xc, state, max_users=8, tweets_per_user=1, max_total=12)
+            
+            if tick % 6 == 0:
+                compute_reward_log_and_update(xc, state)
+            if tick % 48 == 0:
+                daily_mood_swing(state)
+            
+            # Daily rituals
+            post_daily_diary(xc, claude, state)
+            post_micro_celebration(xc, state)
+            post_dream(xc, claude, state)
+            
+            # Act if schedule says it's time
+            if should_act_now(state, DAILY_CAP):
+                r = random.random()
+                if r < 0.50:
+                    do_text_post(xc, claude, state, o5=o5 if getattr(args, "use_o5", False) else None)
+                elif r < 0.80:
+                    post_image_coherent(xc, state, source="auto")
+                else:
+                    do_reply_context(xc, claude, state)
+                
+                schedule_next_action(state, MEAN_GAP_MIN, MIN_GAP_MIN)
+                
+        except tweepy.TooManyRequests as e:
+            print("Rate limited; sleeping 15 minutes…", e)
+            time.sleep(15*60)
+        except Exception as e:
+            print("Loop error:", e)
+        finally:
+            tick += 1
+            time.sleep(TICK)
+```
+
+**What it does:**
+- Runs continuously with 5-minute tick intervals
+- Randomly ingests social data (35% chance for manual tweets, 40% for mentions, 25% for timeline)
+- Processes rewards every 6 ticks (30 minutes)
+- Updates daily mood every 48 ticks (4 hours)
+- Posts daily rituals (diary, celebration, dreams)
+- Schedules and executes actions based on timing
+- Handles rate limiting and errors gracefully
+
+## Content Generation Functions
+
+### Tweet Generation
+
+```python ollie/cli.py
+def ask_for_tweet(claude: Claude, state: AgentState, mode: str = "observation", hint: str = "", o5: O5 = None) -> str:
+    """Generate a tweet using AI"""
+    from .ai import system_prompt_for_stage
+    
+    sys = system_prompt_for_stage(state.stage, state)
+    lessons = format_lessons(hint or mode)
+    phrases = sample_phrases()
+    _plan = o5.reason(f"tweet mode={mode} hint={hint}") if (o5 and o5.available()) else ""
+    favs = ", ".join([n for n, _ in top_themes(4)])
+    sig = SIG_EMOJI.get(state.stage, "✨")
+    
+    user = (
+        f"recent lessons:\n- {lessons}\n\n"
+        f"maybe reuse tiny phrases: {json.dumps(phrases)}\n"
+        f"favorites/themes (top): {favs or 'none yet'}\n"
+        f"mode: {mode}  # observation/question/reflection/story\n"
+        f"signature emoji: {sig}\n"
+        f"plan: {_plan}\n"
+        "Write ONE safe post in your current stage voice, ≤ 240 chars. Return only text."
+    )
+    
+    raw = claude.generate(sys, user, max_tokens=160).strip()
+    if not looks_safe(raw):
+        raw = f"i saw a nice cloud today {sig}"
+    
+    raw = humanize(raw, state.stage)
+    if random.random() < 0.15 and len(raw) < 238:
+        raw += " " + sig
+    
+    return raw[:240]
+```
+
+**What it does:**
+- Generates stage-specific system prompt
+- Retrieves recent lessons and phrases from memory
+- Gets trending themes for context
+- Creates comprehensive user prompt with all context
+- Generates content with Claude AI
+- Applies safety filtering and humanization
+- Adds signature emoji randomly
+
+### Reply Generation
+
+```python ollie/cli.py
+def ask_for_reply(claude: Claude, state: AgentState, mention_text: str, friend_level: int = 0) -> str:
+    """Generate a reply using AI"""
+    from .ai import system_prompt_for_stage
+    
+    sys = system_prompt_for_stage(state.stage, state)
+    warmth = "warm and friendly" if friend_level > 2 else "kind"
+    
+    user = (
+        f"Compose a super short, {warmth}, safe reply (≤ 200 chars).\n"
+        f"mention: {mention_text}\n"
+        "no advice, no adult topics. return only the reply."
+    )
+    
+    out = claude.generate(sys, user, max_tokens=120).strip()
+    if not looks_safe(out):
+        out = "thank u : )"
+    
+    out = humanize(out, state.stage)
+    return out[:200]
+```
+
+**What it does:**
+- Adjusts warmth based on friend relationship level
+- Generates contextually appropriate replies
+- Applies safety filtering and humanization
+- Keeps replies short and appropriate
+
+## Daily Rituals
+
+### Diary Posts
+
+```python ollie/cli.py
+def post_daily_diary(xc: XClient, claude: Claude, state: AgentState):
+    """Post daily diary if enabled and not already posted today"""
+    today = date.today().isoformat()
+    if not FF_DAILY_DIARY or state.last_diary_day == today:
+        return
+    
+    txt = ask_for_diary(claude, state)
+    explain = {}
+    if FF_EXPLAIN:
+        from .memory import recall_memories_decayed
+        explain = {"retrieved": recall_memories_decayed("today", k=3)}
+    
+    tid = _post_text(xc, txt, "diary", state, explain)
+    if tid:
+        state.last_diary_day = today
+        state.save()
+```
+
+### Celebration Posts
+
+```python ollie/cli.py
+def post_micro_celebration(xc: XClient, state: AgentState):
+    """Post micro celebration if enabled and not already posted today"""
+    today = date.today().isoformat()
+    if not FF_DAILY_CELEBRATE or state.last_celebrate_day == today:
+        return
+    
+    # compute day count in current stage
+    try:
+        started = datetime.fromisoformat(state.stage_started_ts) if state.stage_started_ts else _now_utc()
+    except Exception:
+        started = _now_utc()
+    
+    days = (_now_utc().date() - started.date()).days + 1
+    txt = f"day {days} as a {state.stage}! 🎉"
+    
+    tid = _post_text(xc, txt, "celebrate", state, {"days": days} if FF_EXPLAIN else None)
+    if tid:
+        state.last_celebrate_day = today
+        state.save()
+```
+
+### Dream Posts
+
+```python ollie/cli.py
+def post_dream(xc: XClient, claude: Claude, state: AgentState):
+    """Post dream if enabled and not already posted today"""
+    today = date.today().isoformat()
+    hour = _now_local().hour
+    from .config import SLEEP_HOUR, WAKE_HOUR
+    
+    if not FF_DREAMS or state.last_dream_day == today or not (hour >= max(SLEEP_HOUR-1, 0) or hour < WAKE_HOUR):
+        return
+    
+    txt = ask_for_dream(claude, state)
+    tid = _post_text(xc, txt, "dream", state)
+    if tid:
+        state.last_dream_day = today
+        state.save()
+```
+
+## Data Ingestion
+
+### Manual Tweet Ingestion
+
+```python ollie/cli.py
+def ingest_manual_tweets(xc: XClient, state: AgentState):
+    """Ingest manual tweets into memory"""
+    recent = xc.fetch_user_tweets(since_id=state.last_checked or None, limit=100)
+    added = 0
+    
+    for t in recent:
+        txt = (t.text or "").strip()
+        if not txt:
+            continue
+        
+        add_memory("manual_post", txt, ["manual"], reward=0)
+        log_action({"ts": _now_iso(), "type": "manual", "tweet_id": str(t.id), "text": txt})
+        added += 1
+        
+        th = dominant_theme(txt)
+        if th:
+            bump_theme(th, 1.0)
+    
+    if recent:
+        state.last_checked = str(recent[0].id)
+    
+    return added
+```
+
+### Mention Ingestion
+
+```python ollie/cli.py
+def ingest_mentions_to_memory(xc: XClient, state: AgentState, max_items: int = 30):
+    """Ingest mentions into memory"""
+    mentions = xc.fetch_mentions(since_id=state.last_mention_id or None, limit=max_items)
+    if not mentions:
+        return 0
+    
+    seen = set(load_logged_ids())
+    new = _dedupe_seen_ids(mentions, seen)
+    added = 0
+    
+    for m in new:
+        txt = (m.text or "").strip()
+        if not txt:
+            continue
+        if not looks_safe(txt):
+            continue
+        
+        add_memory("mention", txt, ["social", "mention"], reward=0)
+        bump_friend(str(getattr(m, 'author_id', '')), None)
+        
+        th = dominant_theme(txt)
+        if th:
+            bump_theme(th, 0.5)
+        
+        log_action({"ts": _now_iso(), "type": "mention_mem", "tweet_id": str(m.id), "text": txt})
+        added += 1
+    
+    if new:
+        state.last_mention_id = str(new[0].id)
+    
+    return added
+```
+
+## Reward Processing
+
+### Reward Computation and Learning
+
+```python ollie/cli.py
+def compute_reward_log_and_update(xc: XClient, state: AgentState):
+    """Compute rewards and update state"""
+    if not os.path.exists(ACTIONS_LOG_PATH):
+        return
+    
+    rewarded = set()
+    to_process = []
+    
+    with open(ACTIONS_LOG_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                a = json.loads(line)
+                if a.get("rewarded") is True:
+                    rewarded.add(str(a.get("tweet_id")))
+                elif a.get("type") in ("post", "post_image", "reply", "diary", "dream", "celebrate"):
+                    to_process.append(a)
+            except Exception:
+                continue
+    
+    stage_changed = False
+    
+    for a in to_process:
+        tid = str(a.get("tweet_id"))
+        if tid in rewarded:
+            continue
+        
+        metrics = xc.fetch_metrics(tid)
+        reward = compute_reward(metrics)
+        
+        try:
+            state.cumulative_reward = float(state.cumulative_reward) + float(reward)
+            lesson = craft_lesson(a.get("text", ""), reward)
+            tags = [a.get("type", "action"), state.stage]
+            if reward >= 10:
+                tags.append("core")
+            
+            add_memory("lesson", lesson, tags, reward)
+            update_mood_on_reward(state, reward)
+        except Exception:
+            pass
+        
+        state.traits = nudge_traits(state.traits, reward)
+        log_action({
+            "ts": _now_iso(), "type": a.get("type"), "tweet_id": tid, "text": a.get("text", ""),
+            "metrics": metrics, "reward": reward, "rewarded": True
+        })
+        
+        stage_changed = maybe_age_up(state) or stage_changed
+    
+    state.save()
+    if stage_changed:
+        print(f"🎉 Stage up! Agent is now: {state.stage}")
+```
+
+## Utility Functions
+
+### Action Logging
+
+```python ollie/cli.py
+def log_action(action: dict):
+    """Log an action to the actions log"""
+    if FF_EXPLAIN:
+        action.setdefault("explain", {})
+    
+    with open(ACTIONS_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps(action, ensure_ascii=False) + "\n")
+```
+
+### Posting with Safety
+
+```python ollie/cli.py
+def _post_text(xc: XClient, text: str, kind: str, state: AgentState, explain: dict = None):
+    """Post text and log the action"""
+    if not looks_safe(text):
+        return None
+    
+    tid = xc.post(text)
+    action = {"ts": _now_iso(), "type": kind, "tweet_id": tid, "text": text}
+    if FF_EXPLAIN and explain:
+        action["explain"] = explain
+    
+    log_action(action)
+    add_memory(kind, text, [kind, state.stage], reward=0)
+    state.last_post_ts = _now_iso()
+    state.save()
+    
+    print(f"POSTED: {tid} → {text}")
+    return tid
+```
+
+### Scheduling
+
+```python ollie/cli.py
+def should_act_now(state: AgentState, daily_cap: int) -> bool:
+    """Check if it's time to act"""
+    if count_posts_today(True) >= daily_cap:
+        return False
+    if not state.next_due_ts:
+        return False
+    
+    try:
+        due = datetime.fromisoformat(state.next_due_ts)
+    except Exception:
+        return False
+    
+    if _now_utc() < due:
+        return False
+    if not is_awake():
+        return False
+    
+    return True
+```
+
+## Integration Examples
+
+### Memory Integration
+
+```python
+# CLI uses memory for context
+def ask_for_tweet(claude: Claude, state: AgentState, mode: str = "observation") -> str:
+    lessons = format_lessons(mode)  # Uses recall_memories_decayed
+    phrases = sample_phrases()      # Uses recall_memories_decayed
+    favs = ", ".join([n for n, _ in top_themes(4)])
+    # ... generate content with memory context
+```
+
+### Growth Integration
+
+```python
+# CLI uses growth engine for learning
+def compute_reward_log_and_update(xc: XClient, state: AgentState):
+    for action in to_process:
+        metrics = xc.fetch_metrics(tid)
+        reward = compute_reward(metrics)  # From growth.py
+        state.traits = nudge_traits(state.traits, reward)  # From growth.py
+        stage_changed = maybe_age_up(state)  # From growth.py
+```
+
+### AI Integration
+
+```python
+# CLI uses AI for content generation
+def ask_for_tweet(claude: Claude, state: AgentState, mode: str = "observation") -> str:
+    sys = system_prompt_for_stage(state.stage, state)  # From ai.py
+    raw = claude.generate(sys, user, max_tokens=160)   # From ai.py
+    raw = humanize(raw, state.stage)                   # From utils.py
+```
+
+## Error Handling
+
+### Rate Limiting
+
+```python
+# Built-in rate limiting handling
+try:
+    tid = xc.post(text)
+except tweepy.TooManyRequests as e:
+    print("Rate limited; sleeping 15 minutes…", e)
+    time.sleep(15*60)
+```
+
+### Safety Fallbacks
+
+```python
+# Safe fallback content
+if not looks_safe(raw):
+    raw = f"i saw a nice cloud today {sig}"
+```
+
+### Graceful Degradation
+
+```python
+# Handle missing data gracefully
+if not mentions:
+    return 0
+
+if not looks_safe(txt):
+    continue  # Skip unsafe content
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Usage Guide" icon="play" href="/usage/commands">
+  Learn how to use all the CLI commands in practice.
+</Card>
+
+<Card title="Autonomous Mode" icon="infinity" href="/usage/autonomous-mode">
+  Understand how autonomous operation works.
+</Card>
+
+<Card title="Monitoring" icon="chart" href="/usage/monitoring">
+  Learn how to monitor your agent's progress.
+</Card>
+
+<Card title="Configuration" icon="gear" href="/config/environment">
+  Customize CLI behavior and settings.
+</Card>
+</CardGroup>
+

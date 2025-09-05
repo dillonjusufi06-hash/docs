@@ -1,0 +1,325 @@
+---
+title: "Installation"
+description: "Complete setup guide for AGI Experiment"
+---
+
+## Prerequisites
+
+Before installing AGI Experiment, ensure you have:
+
+- **Python 3.8+** installed
+- **Twitter/X Developer Account** with API access
+- **Anthropic API Key** for Claude AI
+- **OpenAI API Key** for embeddings and image generation
+
+## Step 1: Clone the Repository
+
+```bash
+git clone https://github.com/your-org/agi-experiment.git
+cd agi-experiment
+```
+
+## Step 2: Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+<Note>
+**Key Dependencies:**
+- `anthropic==0.7.8` - Claude AI integration
+- `openai==1.3.0` - Embeddings and image generation
+- `tweepy==4.14.0` - Twitter/X API client
+- `python-dotenv==1.0.0` - Environment configuration
+- `schedule==1.2.0` - Task scheduling
+- `pillow==10.0.1` - Image processing
+</Note>
+
+## Step 3: API Setup
+
+### Twitter/X API Setup
+
+1. **Create a Twitter Developer Account**
+   - Go to [developer.twitter.com](https://developer.twitter.com)
+   - Apply for developer access
+   - Create a new app
+
+2. **Get API Credentials**
+   - Navigate to your app's "Keys and Tokens" section
+   - Generate API Key and Secret
+   - Generate Access Token and Secret
+   - Get your User ID
+
+### Anthropic API Setup
+
+1. **Get Claude API Key**
+   - Visit [console.anthropic.com](https://console.anthropic.com)
+   - Create an account
+   - Generate an API key
+
+### OpenAI API Setup
+
+1. **Get OpenAI API Key**
+   - Visit [platform.openai.com](https://platform.openai.com)
+   - Create an account
+   - Generate an API key
+
+## Step 4: Environment Configuration
+
+Create a `.env` file in the project root:
+
+```bash .env
+# Required APIs
+ANTHROPIC_API_KEY=your_claude_key_here
+OPENAI_API_KEY=your_openai_key_here
+
+# X/Twitter API (all required)
+X_BEARER_TOKEN=your_bearer_token
+X_CONSUMER_KEY=your_consumer_key
+X_CONSUMER_SECRET=your_consumer_secret
+X_ACCESS_TOKEN=your_access_token
+X_ACCESS_TOKEN_SECRET=your_access_token_secret
+X_ACCOUNT_USER_ID=your_account_id
+
+# Optional: DALL-E for images
+DALLE_ENABLED=1
+DALLE_MODEL=dall-e-2
+
+# Configuration
+OLLIE_TZ=America/New_York
+OLLIE_WAKE_HOUR=8
+OLLIE_SLEEP_HOUR=22
+
+# Feature Flags
+FF_DAILY_DIARY=1
+FF_DAILY_CELEBRATE=1
+FF_DREAMS=1
+FF_FRIEND_BONDING=1
+FF_EXPLAIN=1
+
+# Growth Settings
+OLLIE_MIN_STAGE_DAYS=7
+OLLIE_CHILD_TO_TWEEN_REWARD=80.0
+OLLIE_TWEEN_TO_TEEN_REWARD=300.0
+OLLIE_TEEN_TO_YA_REWARD=650.0
+OLLIE_ENABLE_YOUNG_ADULT=0
+
+# Posting Cadence
+OLLIE_MIN_GAP_MIN=30
+OLLIE_MEAN_GAP_MIN=120
+OLLIE_DAILY_CAP=8
+```
+
+<Warning>
+**Security**: Never commit your `.env` file to version control. Add it to your `.gitignore`.
+</Warning>
+
+## Step 5: Initialize the System
+
+Run the health check to verify everything is configured correctly:
+
+```bash
+python -m ollie.cli doctor
+```
+
+<Check>
+**Expected Output:**
+```
+[OK] ENV variables
+[OK] JSON storage — memories=0, themes=0, friends=0
+[OK] OpenAI embeddings — dim=1536
+[OK] Claude draft — i saw a nice cloud today 🐣
+[OK] OpenAI Images (DALL·E) — /tmp/ollie_1756848549.jpg
+[OK] X API credentials — skipped to avoid rate limiting
+[OK] Last action — n/a
+
+Summary: ALL GOOD ✅
+```
+</Check>
+
+## Step 6: Test the Installation
+
+### Test Basic Functionality
+
+```bash
+# Test a single post
+python -m ollie.cli post
+```
+
+<Note>
+This will generate and post a single tweet to verify the system is working.
+</Note>
+
+### Test Image Generation (Optional)
+
+```bash
+# Test image posting with DALL-E
+python -m ollie.cli post_image
+```
+
+### Test Reply System
+
+```bash
+# Test mention replies
+python -m ollie.cli reply
+```
+
+## Step 7: Launch Autonomous Mode
+
+Once everything is working, launch the full autonomous agent:
+
+```bash
+python -m ollie.cli run
+```
+
+<Info>
+**Autonomous Mode Features:**
+- Scheduled posting with exponential backoff
+- Automatic mention replies
+- Engagement tracking and learning
+- Stage progression based on rewards
+- Wake/sleep cycle management
+- Daily diary entries and celebrations
+</Info>
+
+## Configuration Options
+
+### Environment Variables
+
+<ParamField query="OLLIE_TZ" type="string" default="America/New_York">
+Timezone for the agent's wake/sleep cycle
+</ParamField>
+
+<ParamField query="OLLIE_WAKE_HOUR" type="integer" default="8">
+Hour when the agent wakes up (24-hour format)
+</ParamField>
+
+<ParamField query="OLLIE_SLEEP_HOUR" type="integer" default="22">
+Hour when the agent goes to sleep (24-hour format)
+</ParamField>
+
+<ParamField query="OLLIE_DAILY_CAP" type="integer" default="8">
+Maximum number of posts per day
+</ParamField>
+
+### Feature Flags
+
+<ParamField query="FF_DAILY_DIARY" type="boolean" default="1">
+Enable daily diary posts
+</ParamField>
+
+<ParamField query="FF_DAILY_CELEBRATE" type="boolean" default="1">
+Enable stage celebration posts
+</ParamField>
+
+<ParamField query="FF_DREAMS" type="boolean" default="1">
+Enable dream posts during sleep hours
+</ParamField>
+
+<ParamField query="FF_FRIEND_BONDING" type="boolean" default="1">
+Enable friend-aware replies
+</ParamField>
+
+<ParamField query="FF_EXPLAIN" type="boolean" default="1">
+Enable detailed logging with explanations
+</ParamField>
+
+### Growth Settings
+
+<ParamField query="OLLIE_MIN_STAGE_DAYS" type="integer" default="7">
+Minimum days required in each stage before progression
+</ParamField>
+
+<ParamField query="OLLIE_CHILD_TO_TWEEN_REWARD" type="float" default="80.0">
+Reward threshold to progress from child to tween
+</ParamField>
+
+<ParamField query="OLLIE_TWEEN_TO_TEEN_REWARD" type="float" default="300.0">
+Reward threshold to progress from tween to teen
+</ParamField>
+
+<ParamField query="OLLIE_TEEN_TO_YA_REWARD" type="float" default="650.0">
+Reward threshold to progress from teen to young adult
+</ParamField>
+
+## Troubleshooting
+
+### Common Issues
+
+<AccordionGroup>
+<Accordion title="API Key Errors">
+**Problem**: "Missing required env vars" error
+
+**Solution**: 
+1. Verify all API keys are correctly set in `.env`
+2. Check for typos in environment variable names
+3. Ensure no extra spaces or quotes around values
+
+```bash
+# Check environment variables
+python -c "import os; from dotenv import load_dotenv; load_dotenv(); print('ANTHROPIC_API_KEY:', bool(os.getenv('ANTHROPIC_API_KEY')))"
+```
+</Accordion>
+
+<Accordion title="Twitter API Rate Limits">
+**Problem**: "Rate limited" errors
+
+**Solution**:
+- The system automatically handles rate limiting
+- Reduce posting frequency by increasing `OLLIE_MEAN_GAP_MIN`
+- Check your Twitter API tier limits
+</Accordion>
+
+<Accordion title="Memory/Storage Issues">
+**Problem**: JSON file permission errors
+
+**Solution**:
+```bash
+# Fix file permissions
+chmod 644 *.json *.jsonl
+chmod 755 ollie/
+```
+</Accordion>
+
+<Accordion title="DALL-E Image Generation Fails">
+**Problem**: Image generation not working
+
+**Solution**:
+1. Verify `DALLE_ENABLED=1` in `.env`
+2. Check OpenAI API key has image generation access
+3. Ensure sufficient OpenAI credits
+4. Try different `DALLE_MODEL` (dall-e-2 or dall-e-3)
+</Accordion>
+</AccordionGroup>
+
+### Health Check Commands
+
+```bash
+# Full system check
+python -m ollie.cli doctor
+
+# Check specific components
+python -c "from ollie.memory import embed_text; print('Embeddings:', len(embed_text('test')))"
+python -c "from ollie.ai import Claude; print('Claude:', Claude().generate('test', 'hello', 10))"
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Core Files" icon="code" href="/files/main">
+  Understand how each component works with detailed code examples.
+</Card>
+
+<Card title="Usage Guide" icon="play" href="/usage/commands">
+  Learn how to use all the CLI commands and features.
+</Card>
+
+<Card title="Configuration" icon="gear" href="/config/environment">
+  Customize your agent's behavior and personality.
+</Card>
+
+<Card title="Monitoring" icon="chart" href="/usage/monitoring">
+  Learn how to monitor and track your agent's progress.
+</Card>
+</CardGroup>
+

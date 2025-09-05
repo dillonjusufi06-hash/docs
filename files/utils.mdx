@@ -1,0 +1,401 @@
+---
+title: "utils.py"
+description: "Utility functions and helpers"
+---
+
+## Overview
+
+The `utils.py` file contains helper functions and utilities used throughout the AGI Experiment system. It provides time management, text humanization, scheduling, and various helper functions that support the core functionality.
+
+## Time Management Functions
+
+### UTC Time Functions
+
+```python ollie/utils.py
+def _now_utc():
+    """Get current UTC time"""
+    return datetime.now(timezone.utc)
+
+def _now_local():
+    """Get current local time"""
+    return datetime.now(TZ)
+
+def _now_iso():
+    """Get current UTC time as ISO string"""
+    return _now_utc().isoformat()
+```
+
+**Usage Examples:**
+```python
+# Get current times
+utc_time = _now_utc()        # datetime object in UTC
+local_time = _now_local()    # datetime object in local timezone
+iso_string = _now_iso()      # "2025-09-02T21:18:54.343462+00:00"
+
+# Use in logging
+log_action({"ts": _now_iso(), "type": "post", "text": "hello"})
+```
+
+### Wake/Sleep Cycle Management
+
+```python ollie/utils.py
+def is_awake() -> bool:
+    """Check if agent should be awake based on configured hours"""
+    from .config import WAKE_HOUR, SLEEP_HOUR
+    
+    h = _now_local().hour
+    if WAKE_HOUR <= SLEEP_HOUR:
+        return WAKE_HOUR <= h < SLEEP_HOUR
+    else:
+        return (h >= WAKE_HOUR) or (h < SLEEP_HOUR)
+```
+
+**Usage Examples:**
+```python
+# Check if agent should be active
+if is_awake():
+    print("Agent is awake and can post")
+else:
+    print("Agent is sleeping")
+
+# Default hours: 8 AM to 10 PM
+# is_awake() returns True between 8:00 and 21:59
+```
+
+## Text Humanization
+
+### Typo Generation
+
+```python ollie/utils.py
+def _maybe_typo(word: str, rate: float) -> str:
+    """Randomly introduce typos based on rate"""
+    if random.random() > rate or len(word) < 3:
+        return word
+    
+    i = random.randrange(1, len(word)-1)
+    choice = random.random()
+    if choice < 0.33:
+        return word[:i] + word[i+1:]  # Remove character
+    if choice < 0.66:
+        return word[:i-1] + word[i] + word[i-1] + word[i+1:]  # Swap characters
+    return word[:i] + random.choice(LETTERS) + word[i:]  # Insert character
+```
+
+**Usage Examples:**
+```python
+# Generate typos based on stage
+typo_rate = STAGE_STYLE["child"]["typos"]  # 0.20 for child stage
+word = "puddle"
+typo_word = _maybe_typo(word, typo_rate)
+# Possible results: "pudle", "pudlde", "pudxle"
+
+# Child stage example
+"puddle" -> "puddxle"  # Character insertion
+"hello" -> "helo"      # Character removal
+"world" -> "wrold"     # Character swap
+```
+
+### Character Elongation
+
+```python ollie/utils.py
+def _elongate(text: str, chance: float) -> str:
+    """Randomly elongate characters based on chance"""
+    if random.random() > chance:
+        return text
+    
+    i = random.randrange(len(text))
+    ch = text[i]
+    return text[:i] + (ch*random.randint(1,3) if ch.isalpha() else ch) + text[i:]
+```
+
+**Usage Examples:**
+```python
+# Elongate characters based on stage
+elong_rate = STAGE_STYLE["child"]["elong"]  # 0.20 for child stage
+text = "hello"
+elongated = _elongate(text, elong_rate)
+# Possible results: "hhello", "helllo", "heello"
+
+# Child stage examples
+"hello" -> "hhello"    # Elongated 'h'
+"world" -> "wooorld"   # Elongated 'o'
+"nice" -> "niiice"     # Elongated 'i'
+```
+
+### Complete Humanization
+
+```python ollie/utils.py
+def humanize(text: str, stage: str) -> str:
+    """Add human-like imperfections based on stage"""
+    cfg = STAGE_STYLE.get(stage, STAGE_STYLE["child"])
+    words = text.split()
+    words = [_maybe_typo(w, cfg["typos"]) for w in words]
+    text = " ".join(words)
+    text = _elongate(text, cfg["elong"]) if len(text) < 200 else text
+    
+    if random.random() < 0.25 and len(text) < 238:
+        text = text.rstrip() + " " + random.choice(cfg["emojis"])
+    
+    return text[:240]
+```
+
+**Usage Examples:**
+```python
+# Humanize text for different stages
+original = "I saw a rainbow today and it was beautiful"
+
+# Child stage
+child_text = humanize(original, "child")
+# "i saw a rainbw today and it was beutiful 🌈"
+
+# Tween stage  
+tween_text = humanize(original, "tween")
+# "i saw a rainbow today and it was beautiful 🌟"
+
+# Teen stage
+teen_text = humanize(original, "teen")
+# "I saw a rainbow today and it was beautiful ✨"
+```
+
+## Memory and Context Functions
+
+### Lesson Formatting
+
+```python ollie/utils.py
+def format_lessons(hint: str) -> str:
+    """Format recent lessons for AI prompts"""
+    from .memory import recall_memories_decayed
+    
+    recents = recall_memories_decayed(hint or "tweet", k=8)
+    if not recents:
+        recents = ["use lowercase; simple words", "ask tiny questions sometimes", "avoid scary/adult topics"]
+    return "\n- ".join(recents)
+```
+
+**Usage Examples:**
+```python
+# Format lessons for AI prompts
+lessons = format_lessons("observation")
+# Returns: "rainbow posts did awesome (reward=16.1). keep it short, sweet, a little silly.\n- use lowercase; simple words\n- ask tiny questions sometimes"
+
+# Use in AI generation
+user_prompt = f"recent lessons:\n- {lessons}\n\nWrite a tweet..."
+```
+
+### Phrase Sampling
+
+```python ollie/utils.py
+def sample_phrases(n: int = 2) -> list[str]:
+    """Sample recent phrases for AI prompts"""
+    from .memory import recall_memories_decayed
+    
+    texts = recall_memories_decayed("phrases", k=20)
+    phrases = []
+    for t in texts:
+        words = [w for w in re.split(r"\s+", t) if len(w) > 2]
+        if len(words) >= 3:
+            i = random.randint(0, max(0, len(words)-3))
+            phrases.append(" ".join(words[i:i+3]))
+    
+    random.shuffle(phrases)
+    return phrases[:n]
+```
+
+**Usage Examples:**
+```python
+# Sample phrases from memory
+phrases = sample_phrases(2)
+# Returns: ["saw a rainbow", "made me smile"]
+
+# Use in AI generation
+user_prompt = f"maybe reuse tiny phrases: {json.dumps(phrases)}\nWrite a tweet..."
+```
+
+## Scheduling Functions
+
+### Exponential Distribution
+
+```python ollie/utils.py
+def _exp_minutes(mean_min: float) -> float:
+    """Generate exponential distribution for timing"""
+    import math
+    u = max(1e-6, random.random())
+    return -mean_min * math.log(u)
+```
+
+**Usage Examples:**
+```python
+# Generate random wait times
+mean_gap = 120  # 2 hours average
+wait_time = _exp_minutes(mean_gap)
+# Returns random time around 2 hours (exponential distribution)
+
+# Use for scheduling
+next_action_time = now + timedelta(minutes=wait_time)
+```
+
+### Action Scheduling
+
+```python ollie/utils.py
+def schedule_next_action(state, mean_gap_min: int, min_gap_min: int):
+    """Schedule next action with exponential backoff"""
+    from .config import WAKE_HOUR
+    
+    now = _now_utc()
+    wait_min = max(min_gap_min, _exp_minutes(float(mean_gap_min)))
+    
+    if not is_awake():
+        local = _now_local()
+        next_local = local.replace(hour=WAKE_HOUR, minute=0, second=0, microsecond=0)
+        if local.hour >= WAKE_HOUR:
+            next_local = next_local + timedelta(days=1)
+        state.next_due_ts = next_local.astimezone(timezone.utc).isoformat()
+        state.save()
+        return
+    
+    state.next_due_ts = (now + timedelta(minutes=wait_min)).isoformat()
+    state.save()
+```
+
+**Usage Examples:**
+```python
+# Schedule next action
+state = AgentState.load()
+schedule_next_action(state, mean_gap_min=120, min_gap_min=30)
+
+# If awake: schedules random time between 30-120 minutes
+# If sleeping: schedules for next wake time (8 AM)
+
+print(f"Next action scheduled for: {state.next_due_ts}")
+```
+
+## Configuration Constants
+
+### Stage Styling
+
+```python ollie/utils.py
+# From config.py
+STAGE_STYLE = {
+    "child": {"emojis":["🙂","🌈","🐣","✨","🍭","🐸","🖍️"], "typos":0.20, "elong":0.20},
+    "tween": {"emojis":["😄","🌟","🎈","🐶","💫","🍕"], "typos":0.12, "elong":0.15},
+    "teen":  {"emojis":["😅","✨","👍","🎨","🧃"],       "typos":0.06, "elong":0.10},
+    "young_adult": {"emojis":["😊","✨","🌿","🎧"],      "typos":0.02, "elong":0.05},
+}
+```
+
+### Signature Emojis
+
+```python ollie/utils.py
+SIG_EMOJI = {"child":"🐣","tween":"🎈","teen":"✨","young_adult":"🌿"}
+```
+
+### Season Emojis
+
+```python ollie/utils.py
+SEASON_EMOJI = {1:"❄️",2:"❄️",3:"🌱",4:"🌷",5:"🌼",6:"🌞",7:"🌞",8:"🌞",9:"🍂",10:"🍁",11:"🍁",12:"🎄"}
+```
+
+## Integration Examples
+
+### CLI Integration
+
+```python
+# cli.py uses utils for content generation
+def ask_for_tweet(claude: Claude, state: AgentState, mode: str = "observation") -> str:
+    lessons = format_lessons(mode)  # From utils.py
+    phrases = sample_phrases()      # From utils.py
+    sig = SIG_EMOJI.get(state.stage, "✨")  # From utils.py
+    
+    # Generate content
+    raw = claude.generate(sys, user, max_tokens=160).strip()
+    raw = humanize(raw, state.stage)  # From utils.py
+    
+    return raw[:240]
+```
+
+### Scheduling Integration
+
+```python
+# cli.py uses utils for scheduling
+def schedule_next_action(state, mean_gap_min: int, min_gap_min: int):
+    # Uses _exp_minutes, is_awake, _now_utc, _now_local
+    pass
+
+def should_act_now(state: AgentState, daily_cap: int) -> bool:
+    if not is_awake():  # From utils.py
+        return False
+    # ... check timing
+```
+
+### AI Integration
+
+```python
+# ai.py uses utils for seasonal context
+def system_prompt_for_stage(stage: str, state: AgentState) -> str:
+    season_mark = SEASON_EMOJI.get(datetime.now(TZ).month, "✨")  # From utils.py
+    mood = f"mood: happiness={state.happiness:.2f}, energy={state.energy:.2f}. reflect subtly. {season_mark}\n"
+    # ... build prompt
+```
+
+## Performance Considerations
+
+### Memory Optimization
+
+```python
+# Use shortlist for recent memories only
+def recall_memories_decayed(query: str, k: int = 8, shortlist: int = 60):
+    for memory in memories[-shortlist:]:  # Only check recent memories
+        # ... similarity calculation
+```
+
+### Efficient Text Processing
+
+```python
+# Limit humanization to shorter texts
+def humanize(text: str, stage: str) -> str:
+    text = _elongate(text, cfg["elong"]) if len(text) < 200 else text
+    # Only elongate shorter texts to avoid performance issues
+```
+
+## Error Handling
+
+### Graceful Fallbacks
+
+```python
+# Provide fallbacks for missing data
+def format_lessons(hint: str) -> str:
+    recents = recall_memories_decayed(hint or "tweet", k=8)
+    if not recents:
+        recents = ["use lowercase; simple words", "ask tiny questions sometimes", "avoid scary/adult topics"]
+    return "\n- ".join(recents)
+```
+
+### Safe Random Generation
+
+```python
+# Ensure random values are within bounds
+def _exp_minutes(mean_min: float) -> float:
+    u = max(1e-6, random.random())  # Prevent log(0)
+    return -mean_min * math.log(u)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="CLI Interface" icon="terminal" href="/files/cli">
+  See how utilities are used in the command-line interface.
+</Card>
+
+<Card title="AI Integration" icon="robot" href="/files/ai">
+  Learn how utilities support AI content generation.
+</Card>
+
+<Card title="Configuration" icon="gear" href="/config/environment">
+  Understand how to customize utility behavior.
+</Card>
+
+<Card title="Usage Guide" icon="play" href="/usage/commands">
+  See utilities in action with real examples.
+</Card>
+</CardGroup>
+
